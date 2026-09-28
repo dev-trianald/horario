@@ -35,3 +35,15 @@ Publica la carpeta en un hosting con HTTPS, por ejemplo Netlify o GitHub Pages. 
 - En iPhone con Safari, pulsa **Compartir**, después **Añadir a pantalla de inicio** y confirma.
 
 La aplicación instalada usa la misma URL, cuenta y base de datos de Supabase que la versión del ordenador. Necesita conexión a Internet para iniciar sesión y sincronizar tareas.
+
+## Obtener un APK para Android
+
+GitHub Pages no genera archivos APK: publica la PWA. Para crear el APK a partir de la versión publicada:
+
+1. Sube el proyecto a GitHub y activa **Settings > Pages > Deploy from a branch**, usando la rama `main` y la carpeta `/root`.
+2. Abre la URL HTTPS que GitHub Pages te proporcione y comprueba que la aplicación funciona.
+3. Entra en [PWABuilder](https://www.pwabuilder.com/), pega esa URL y pulsa **Start**.
+4. Cuando termine el análisis, elige **Package for stores > Android** y descarga el paquete generado.
+5. En Supabase añade la URL de GitHub Pages en **Authentication > URL Configuration** como **Site URL** y como URL de redirección si aparece esa opción.
+
+El APK será una versión instalable de esta misma aplicación: usará la misma URL, el mismo `config.js` y la misma base de datos de Supabase. Para cambios posteriores, publica primero los cambios en GitHub Pages y vuelve a generar el paquete si quieres actualizar el APK.

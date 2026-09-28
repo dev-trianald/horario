@@ -1,8 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#1e1e1e"/>
-  <rect x="80" y="96" width="352" height="320" rx="32" fill="#2d2d2d" stroke="#4da8da" stroke-width="24"/>
-  <path d="M128 184h256M128 264h256M128 344h256M208 96v320M304 96v320" fill="none" stroke="#4da8da" stroke-width="20"/>
-  <circle cx="160" cy="144" r="12" fill="#fff"/>
-  <circle cx="256" cy="144" r="12" fill="#fff"/>
-  <circle cx="352" cy="144" r="12" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradiente de fondo oscuro -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181a20"/>
+      <stop offset="100%" stop-color="#2a2d3a"/>
+    </linearGradient>
+
+    <!-- Gradiente de la tarjeta del horario -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#343a46"/>
+      <stop offset="100%" stop-color="#21252f"/>
+    </linearGradient>
+
+    <!-- Gradiente de la cabecera DAM -->
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2980b9"/>
+      <stop offset="100%" stop-color="#8e44ad"/>
+    </linearGradient>
+
+    <!-- Sombras -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    
+    <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- Forma base estilo app de Android (Squircle 512x512) -->
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)"/>
+  <rect x="2" y="2" width="508" height="508" rx="113" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
+
+  <!-- Tarjeta central del Horario -->
+  <g filter="url(#shadow)">
+    <rect x="76" y="76" width="360" height="360" rx="32" fill="url(#cardGrad)"/>
+  </g>
+
+  <!-- Cabecera de la tarjeta con estilo código/DAM -->
+  <path d="M 76 108 C 76 90.3 90.3 76 108 76 L 404 76 C 421.7 76 436 90.3 436 108 L 436 156 L 76 156 Z" fill="url(#headerGrad)"/>
+
+  <!-- Anillas de la agenda -->
+  <rect x="150" y="56" width="20" height="40" rx="10" fill="#ffffff" opacity="0.9"/>
+  <rect x="342" y="56" width="20" height="40" rx="10" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Símbolo de código < /> en la cabecera -->
+  <path d="M 226 106 L 210 116 L 226 126 M 286 106 L 302 116 L 286 126 M 264 100 L 248 132" 
+        stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>
+
+  <!-- Bloques de asignaturas (colores reales del horario) -->
+  <!-- Fila 1 -->
+  <rect x="106" y="180" width="88" height="56" rx="12" fill="#555555"/> <!-- IP2 -->
+  <rect x="212" y="180" width="88" height="56" rx="12" fill="#2980b9"/> <!-- PSP -->
+  <rect x="318" y="180" width="88" height="56" rx="12" fill="#27ae60"/> <!-- SGE -->
+
+  <!-- Fila 2 -->
+  <rect x="106" y="252" width="88" height="56" rx="12" fill="#8e44ad"/> <!-- PMDM -->
+  <rect x="212" y="252" width="88" height="56" rx="12" fill="#d35400"/> <!-- DI -->
+  <rect x="318" y="252" width="88" height="56" rx="12" fill="#16a085"/> <!-- PI -->
+
+  <!-- Fila 3 -->
+  <rect x="106" y="324" width="88" height="56" rx="12" fill="#2c3e50"/> <!-- AD -->
+  <rect x="212" y="324" width="88" height="56" rx="12" fill="#3a536c"/> <!-- LD -->
+  <rect x="318" y="324" width="88" height="56" rx="12" fill="#b7950b"/> <!-- ING -->
+
+  <!-- Chapa flotante inferior con el tick de tareas/exámenes -->
+  <g filter="url(#badgeShadow)">
+    <circle cx="380" cy="380" r="42" fill="#27ae60"/>
+    <circle cx="380" cy="380" r="42" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+    <path d="M 362 380 L 374 392 L 398 368" stroke="#ffffff" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
 </svg>
+
