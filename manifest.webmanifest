@@ -1,0 +1,19 @@
+{
+    "name": "Mi Horario 2º DAM",
+    "short_name": "Mi Horario",
+    "description": "Horario, tareas y exámenes de 2º DAM",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#1e1e1e",
+    "theme_color": "#1e1e1e",
+    "lang": "es",
+    "icons": [
+        {
+            "src": "./icons/horario.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}

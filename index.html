@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Horario - 2º DAM</title>
+    <meta name="theme-color" content="#1e1e1e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Mi Horario">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icons/horario.svg">
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.2);
+            color: #4da8da;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 1400px;
+            width: 100%;
+        }
+
+        .schedule-grid {
+            display: grid;
+            grid-template-columns: 110px repeat(5, 120px);
+            gap: 8px;
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+        }
+
+        .schedule-wrapper {
+            max-width: 100%;
+            overflow-x: auto;
+            padding: 2px;
+        }
+
+        .header-cell, .time-cell, .subject {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+            height: 75px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .header-cell {
+            background-color: #3d3d3d;
+            color: #aaa;
+            font-weight: bold;
+            font-size: 1rem;
+            height: 50px;
+        }
+
+        .time-cell {
+            background-color: #3d3d3d;
+            color: #aaa;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+
+        .break-cell {
+            height: 45px !important;
+        }
+
+        /* Colores oscurecidos para que resalte la letra blanca */
+        .IP2 { background-color: #555555; color: white; }
+        .PSP { background-color: #2980b9; color: white; } 
+        .SGE { background-color: #27ae60; color: white; } 
+        .PMDM { background-color: #8e44ad; color: white; } 
+        .PI { background-color: #16a085; color: white; } 
+        .DI { background-color: #d35400; color: white; } 
+        .ING { background-color: #b7950b; color: white; } 
+        .AD { background-color: #2c3e50; color: white; } 
+        .LD { background-color: #3a536c; color: white; } 
+        
+        .RECREO { 
+            background-color: #444; 
+            color: #aaa; 
+            font-weight: bold; 
+            cursor: not-allowed; 
+            grid-column: span 5; 
+            letter-spacing: 12px;
+        }
+
+        .subject {
+            cursor: pointer;
+        }
+
+        .subject-name {
+            font-size: 1.1rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+        }
+
+        .prof {
+            font-size: 0.75rem;
+            opacity: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            margin-top: 0;
+            font-weight: normal;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Efecto CHULO al pasar el ratón */
+        .subject:hover {
+            transform: scale(1.15);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.7);
+            z-index: 10;
+        }
+
+        .subject:hover .prof {
+            opacity: 1;
+            max-height: 20px;
+            margin-top: 4px;
+        }
+
+        /* Panel de Tareas */
+        .tasks-panel {
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 12px;
+            width: 350px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            height: fit-content;
+        }
+
+        .tasks-panel h2 {
+            margin-top: 0;
+            font-size: 1.3rem;
+            border-bottom: 2px solid #555;
+            padding-bottom: 10px;
+            color: #ddd;
+        }
+
+        #task-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .task-item {
+            background-color: #3d3d3d;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 5px solid #3498db;
+            animation: fadeIn 0.4s ease;
+            position: relative;
+        }
+
+        .task-header {
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .action-btn:hover {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+
+        .task-text {
+            font-size: 0.95rem;
+            color: #fff;
+            word-wrap: break-word;
+        }
+
+        .no-tasks {
+            color: #777;
+            font-style: italic;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .auth-panel {
+            width: min(100%, 460px);
+            margin-bottom: 24px;
+            padding: 18px;
+            background-color: #2d2d2d;
+            border-radius: 8px;
+        }
+
+        .auth-panel form, .auth-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .auth-panel input {
+            min-width: 0;
+            flex: 1 1 150px;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background: #1e1e1e;
+            color: #fff;
+        }
+
+        .auth-panel button {
+            padding: 10px 12px;
+            border: 0;
+            border-radius: 4px;
+            background: #2980b9;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .auth-panel button:disabled {
+            cursor: wait;
+            opacity: 0.6;
+        }
+
+        #auth-status {
+            position: fixed;
+            top: 18px;
+            left: 50%;
+            z-index: 20;
+            max-width: min(460px, calc(100% - 28px));
+            margin: 0;
+            padding: 12px 16px;
+            border: 1px solid rgba(77, 168, 218, 0.5);
+            border-radius: 8px;
+            background: #2d2d2d;
+            color: #fff;
+            overflow-wrap: anywhere;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            transform: translate(-50%, -18px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        #auth-status.toast-visible {
+            transform: translate(-50%, 0);
+            opacity: 1;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 900px) {
+            body {
+                padding: 14px 10px 24px;
+            }
+
+            h1 {
+                margin: 6px 0 22px;
+                font-size: 1.8rem;
+            }
+
+            .main-container {
+                align-items: stretch;
+                gap: 18px;
+            }
+
+            .schedule-wrapper {
+                width: 100%;
+            }
+
+            .tasks-panel {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .auth-panel {
+                margin-bottom: 18px;
+                padding: 14px;
+            }
+
+            .auth-panel form input,
+            .auth-panel form button {
+                width: 100%;
+                flex-basis: 100%;
+            }
+
+            .auth-actions {
+                align-items: center;
+                justify-content: space-between;
+            }
+
+            .schedule-grid {
+                padding: 10px;
+            }
+
+            .header-cell, .time-cell, .subject {
+                height: 68px;
+            }
+
+            .header-cell {
+                height: 46px;
+                font-size: 0.9rem;
+            }
+
+            .subject-name {
+                font-size: 1rem;
+            }
+
+            .prof {
+                display: none;
+            }
+
+            .subject:hover {
+                transform: none;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Horario 2º DAM</h1>
+
+    <section class="auth-panel" aria-label="Cuenta de Supabase">
+        <form id="auth-form">
+            <input id="auth-email" type="email" autocomplete="email" placeholder="Correo electrónico" required>
+            <input id="auth-password" type="password" autocomplete="current-password" placeholder="Contraseña" minlength="6" required>
+            <button type="submit" value="signin">Iniciar sesión</button>
+            <button type="submit" value="signup">Crear cuenta</button>
+        </form>
+        <div id="signed-in" class="auth-actions hidden">
+            <span id="account-email"></span>
+            <button id="signout-button" type="button">Cerrar sesión</button>
+        </div>
+        <p id="auth-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <div id="app-content" class="main-container hidden">
+        <!-- Rejilla del Horario -->
+        <div class="schedule-wrapper">
+        <div class="schedule-grid">
+            <!-- Fila de Cabeceras -->
+            <div class="header-cell">Horas</div>
+            <div class="header-cell">Lunes</div>
+            <div class="header-cell">Martes</div>
+            <div class="header-cell">Miércoles</div>
+            <div class="header-cell">Jueves</div>
+            <div class="header-cell">Viernes</div>
+
+            <!-- Fila 1: 8:15 a 9:15 -->
+            <div class="time-cell">8:15 - 9:15</div>
+            <div class="subject IP2" data-day="Lunes" data-subject="IP2"><div class="subject-name">IP2</div><div class="prof">Prof. Lourdes</div></div>
+            <div class="subject PI" data-day="Martes" data-subject="PI"><div class="subject-name">PI</div><div class="prof">Prof. Eva</div></div>
+            <div class="subject DI" data-day="Miércoles" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+            <div class="subject SGE" data-day="Jueves" data-subject="SGE"><div class="subject-name">SGE</div><div class="prof">Prof. Rafa</div></div>
+            <div class="subject PSP" data-day="Viernes" data-subject="PSP"><div class="subject-name">PSP</div><div class="prof">Prof. Daniel</div></div>
+
+            <!-- Fila 2: 9:15 a 10:15 -->
+            <div class="time-cell">9:15 - 10:15</div>
+            <div class="subject PSP" data-day="Lunes" data-subject="PSP"><div class="subject-name">PSP</div><div class="prof">Prof. Daniel</div></div>
+            <div class="subject PI" data-day="Martes" data-subject="PI"><div class="subject-name">PI</div><div class="prof">Prof. Eva</div></div>
+            <div class="subject DI" data-day="Miércoles" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+            <div class="subject SGE" data-day="Jueves" data-subject="SGE"><div class="subject-name">SGE</div><div class="prof">Prof. Rafa</div></div>
+            <div class="subject DI" data-day="Viernes" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+
+            <!-- Fila 3: 10:15 a 11:15 -->
+            <div class="time-cell">10:15 - 11:15</div>
+            <div class="subject PSP" data-day="Lunes" data-subject="PSP"><div class="subject-name">PSP</div><div class="prof">Prof. Daniel</div></div>
+            <div class="subject DI" data-day="Martes" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+            <div class="subject PMDM" data-day="Miércoles" data-subject="PMDM"><div class="subject-name">PMDM</div><div class="prof">Prof. Eva</div></div>
+            <div class="subject ING" data-day="Jueves" data-subject="ING"><div class="subject-name">ING</div><div class="prof">Prof. Pablo</div></div>
+            <div class="subject ING" data-day="Viernes" data-subject="ING"><div class="subject-name">ING</div><div class="prof">Prof. Pablo</div></div>
+
+            <!-- Fila Recreo -->
+            <div class="time-cell break-cell">11:15 - 11:45</div>
+            <div class="RECREO header-cell break-cell">R E C R E O</div>
+
+            <!-- Fila 4: 11:45 a 12:45 -->
+            <div class="time-cell">11:45 - 12:45</div>
+            <div class="subject SGE" data-day="Lunes" data-subject="SGE"><div class="subject-name">SGE</div><div class="prof">Prof. Rafa</div></div>
+            <div class="subject DI" data-day="Martes" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+            <div class="subject IP2" data-day="Miércoles" data-subject="IP2"><div class="subject-name">IP2</div><div class="prof">Prof. Lourdes</div></div>
+            <div class="subject PMDM" data-day="Jueves" data-subject="PMDM"><div class="subject-name">PMDM</div><div class="prof">Prof. Eva</div></div>
+            <div class="subject IP2" data-day="Viernes" data-subject="IP2"><div class="subject-name">IP2</div><div class="prof">Prof. Lourdes</div></div>
+
+            <!-- Fila 5: 12:45 a 13:45 -->
+            <div class="time-cell">12:45 - 13:45</div>
+            <div class="subject SGE" data-day="Lunes" data-subject="SGE"><div class="subject-name">SGE</div><div class="prof">Prof. Rafa</div></div>
+            <div class="subject LD" data-day="Martes" data-subject="LD"><div class="subject-name">LD</div><div class="prof">Prof. Fernando</div></div>
+            <div class="subject LD" data-day="Miércoles" data-subject="LD"><div class="subject-name">LD</div><div class="prof">Prof. Fernando</div></div>
+            <div class="subject AD" data-day="Jueves" data-subject="AD"><div class="subject-name">AD</div><div class="prof">Prof. Fernando</div></div>
+            <div class="subject LD" data-day="Viernes" data-subject="LD"><div class="subject-name">LD</div><div class="prof">Prof. Fernando</div></div>
+
+            <!-- Fila 6: 13:45 a 14:45 -->
+            <div class="time-cell">13:45 - 14:45</div>
+            <div class="subject PMDM" data-day="Lunes" data-subject="PMDM"><div class="subject-name">PMDM</div><div class="prof">Prof. Eva</div></div>
+            <div class="subject AD" data-day="Martes" data-subject="AD"><div class="subject-name">AD</div><div class="prof">Prof. Fernando</div></div>
+            <div class="subject AD" data-day="Miércoles" data-subject="AD"><div class="subject-name">AD</div><div class="prof">Prof. Fernando</div></div>
+            <div class="subject DI" data-day="Jueves" data-subject="DI"><div class="subject-name">DI</div><div class="prof">Prof. Jacobo</div></div>
+            <div class="subject AD" data-day="Viernes" data-subject="AD"><div class="subject-name">AD</div><div class="prof">Prof. Fernando</div></div>
+        </div>
+        </div>
+
+        <!-- Panel de Tareas -->
+        <div class="tasks-panel">
+            <h2>Tareas y Exámenes</h2>
+            <div id="task-list">
+                <div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script>
+        const authForm = document.getElementById('auth-form');
+        const authStatus = document.getElementById('auth-status');
+        const signedInElement = document.getElementById('signed-in');
+        const appContent = document.getElementById('app-content');
+        const taskListElement = document.getElementById('task-list');
+        const supabaseConfig = window.SUPABASE_CONFIG;
+        let supabaseClient = null;
+        let tasks = [];
+
+        let statusTimeout;
+
+        function setStatus(message, duration = 4500) {
+            window.clearTimeout(statusTimeout);
+            authStatus.textContent = message;
+            authStatus.classList.remove('hidden');
+            authStatus.classList.add('toast-visible');
+            statusTimeout = window.setTimeout(() => {
+                authStatus.classList.remove('toast-visible');
+                authStatus.classList.add('hidden');
+            }, duration);
+        }
+
+        function showTaskError(error) {
+            console.error(error);
+            if (error.code === 'PGRST205') {
+                setStatus('Falta crear la tabla de tareas. Ejecuta supabase/schema.sql en el SQL Editor de Supabase.');
+                return;
+            }
+            setStatus(`No se pudo guardar el cambio: ${error.message || 'error de conexión'}`);
+        }
+
+        async function loadTasks() {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .select('id, day, subject, message, color')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            tasks = data;
+            updateTasksPanel();
+        }
+
+        async function applySession(session) {
+            const isSignedIn = Boolean(session);
+            authForm.classList.toggle('hidden', isSignedIn);
+            signedInElement.classList.toggle('hidden', !isSignedIn);
+            appContent.classList.toggle('hidden', !isSignedIn);
+
+            if (!isSignedIn) {
+                tasks = [];
+                updateTasksPanel();
+                return;
+            }
+
+            document.getElementById('account-email').textContent = session.user.email;
+            setStatus('Sesión iniciada.');
+            try {
+                await loadTasks();
+            } catch (error) {
+                showTaskError(error);
+            }
+        }
+
+        if (!window.supabase || !supabaseConfig?.url || !supabaseConfig?.anonKey) {
+            setStatus('Configura la URL y la clave pública de Supabase en config.js para empezar.');
+            authForm.querySelectorAll('button').forEach(button => button.disabled = true);
+        } else {
+            supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+            supabaseClient.auth.onAuthStateChange((_event, session) => {
+                setTimeout(() => applySession(session), 0);
+            });
+
+            supabaseClient.auth.getSession().then(({ data, error }) => {
+                if (error) showTaskError(error);
+                else applySession(data.session);
+            });
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
+        }
+
+        authForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (!supabaseClient) return;
+
+            const submitButton = event.submitter;
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            submitButton.disabled = true;
+            setStatus('Conectando…');
+
+            try {
+                const result = submitButton.value === 'signup'
+                    ? await supabaseClient.auth.signUp({ email, password })
+                    : await supabaseClient.auth.signInWithPassword({ email, password });
+                if (result.error) throw result.error;
+                if (submitButton.value === 'signup' && !result.data.session) {
+                    setStatus('Cuenta creada. Revisa tu correo para confirmar la dirección antes de iniciar sesión.');
+                } else {
+                    setStatus('Sesión iniciada.');
+                }
+            } catch (error) {
+                setStatus(error.message || 'No se pudo completar el acceso.');
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+
+        document.getElementById('signout-button').addEventListener('click', async () => {
+            const { error } = await supabaseClient.auth.signOut();
+            if (error) showTaskError(error);
+        });
+
+        document.querySelectorAll('.subject').forEach(cell => {
+            cell.addEventListener('click', async function() {
+                if (!supabaseClient) return;
+                const day = this.getAttribute('data-day');
+                const subject = this.getAttribute('data-subject');
+                const taskMessage = prompt(`Añadir tarea/examen para ${subject} el ${day}:`);
+
+                if (taskMessage && taskMessage.trim() !== "") {
+                    const { error } = await supabaseClient.from('tasks').insert({
+                        day: day,
+                        subject: subject,
+                        message: taskMessage.trim(),
+                        color: window.getComputedStyle(this).backgroundColor
+                    });
+                    if (error) showTaskError(error);
+                    else await loadTasks().catch(showTaskError);
+                }
+            });
+        });
+
+        async function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if(task) {
+                const newMessage = prompt(`Editando tarea de ${task.subject} (${task.day}):`, task.message);
+                if (newMessage && newMessage.trim() !== "") {
+                    const { error } = await supabaseClient
+                        .from('tasks')
+                        .update({ message: newMessage.trim() })
+                        .eq('id', id);
+                    if (error) showTaskError(error);
+                    else await loadTasks().catch(showTaskError);
+                }
+            }
+        }
+
+        async function deleteTask(id) {
+            if(confirm("¿Seguro que quieres borrar esta tarea?")) {
+                const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
+                if (error) showTaskError(error);
+                else await loadTasks().catch(showTaskError);
+            }
+        }
+
+        function updateTasksPanel() {
+            if (tasks.length === 0) {
+                taskListElement.innerHTML = '<div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>';
+                return;
+            }
+            
+            taskListElement.replaceChildren();
+
+            tasks.forEach(task => {
+                const taskDiv = document.createElement('div');
+                taskDiv.className = 'task-item';
+                taskDiv.style.borderLeftColor = task.color;
+
+                const header = document.createElement('div');
+                header.className = 'task-header';
+                const label = document.createElement('span');
+                label.textContent = `${task.day} - ${task.subject}`;
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+
+                const editButton = document.createElement('button');
+                editButton.className = 'action-btn';
+                editButton.title = 'Editar';
+                editButton.type = 'button';
+                editButton.textContent = '✏️';
+                editButton.addEventListener('click', () => editTask(task.id));
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'action-btn';
+                deleteButton.title = 'Eliminar';
+                deleteButton.type = 'button';
+                deleteButton.textContent = '🗑️';
+                deleteButton.addEventListener('click', () => deleteTask(task.id));
+
+                const message = document.createElement('div');
+                message.className = 'task-text';
+                message.textContent = task.message;
+                actions.append(editButton, deleteButton);
+                header.append(label, actions);
+                taskDiv.append(header, message);
+                taskListElement.appendChild(taskDiv);
+            });
+        }
+    </script>
+</body>
+</html>
