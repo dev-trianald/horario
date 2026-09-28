@@ -1,10 +1,12 @@
-const CACHE_NAME = 'mi-horario-v1';
+const CACHE_NAME = 'mi-horario-v2';
 const APP_SHELL = [
     './',
     './index.html',
     './config.js',
     './manifest.webmanifest',
-    './icons/horario.svg'
+    './icons/horario.svg',
+    './icons/icon-192.png',
+    './icons/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
