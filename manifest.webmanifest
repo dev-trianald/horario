@@ -1,6 +1,6 @@
 {
-    "name": "Mi Horario 2º DAM",
-    "short_name": "Mi Horario",
+    "name": "TaskDAM",
+    "short_name": "TaskDAM",
     "description": "Horario, tareas y exámenes de 2º DAM",
     "id": "./",
     "start_url": "./",
