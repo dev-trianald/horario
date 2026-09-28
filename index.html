@@ -228,10 +228,31 @@
             border-radius: 8px;
         }
 
+        .auth-panel.is-authenticated {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 15;
+            width: auto;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
         .auth-panel form, .auth-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
+        }
+
+        .auth-actions {
+            width: 100%;
+            justify-content: flex-end;
+        }
+
+        .auth-panel.is-authenticated .auth-actions {
+            width: auto;
         }
 
         .auth-panel input {
@@ -317,9 +338,19 @@
         }
 
         @media (max-width: 480px) {
+            body {
+                padding-bottom: 0;
+            }
+
             .auth-panel {
                 margin-bottom: 18px;
                 padding: 14px;
+            }
+
+            .auth-panel.is-authenticated {
+                right: 12px;
+                bottom: 12px;
+                padding: 0;
             }
 
             .auth-panel form input,
@@ -330,7 +361,7 @@
 
             .auth-actions {
                 align-items: center;
-                justify-content: space-between;
+                justify-content: flex-end;
             }
 
             .schedule-grid {
@@ -373,7 +404,6 @@
             <button type="submit" value="signup">Crear cuenta</button>
         </form>
         <div id="signed-in" class="auth-actions hidden">
-            <span id="account-email"></span>
             <button id="signout-button" type="button">Cerrar sesión</button>
         </div>
         <p id="auth-status" role="status" aria-live="polite"></p>
@@ -458,6 +488,7 @@
     <script src="./config.js"></script>
     <script>
         const authForm = document.getElementById('auth-form');
+        const authPanel = document.querySelector('.auth-panel');
         const authStatus = document.getElementById('auth-status');
         const signedInElement = document.getElementById('signed-in');
         const appContent = document.getElementById('app-content');
@@ -501,6 +532,7 @@
 
         async function applySession(session) {
             const isSignedIn = Boolean(session);
+            authPanel.classList.toggle('is-authenticated', isSignedIn);
             authForm.classList.toggle('hidden', isSignedIn);
             signedInElement.classList.toggle('hidden', !isSignedIn);
             appContent.classList.toggle('hidden', !isSignedIn);
@@ -511,7 +543,6 @@
                 return;
             }
 
-            document.getElementById('account-email').textContent = session.user.email;
             setStatus('Sesión iniciada.');
             try {
                 await loadTasks();
