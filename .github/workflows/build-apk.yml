@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub si quieres
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -15,11 +15,8 @@ jobs:
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+      - name: Esperar despliegue de GitHub Pages
+        run: sleep 20
 
       - name: Generar paquete APK desde PWA
         uses: pwa-builder/pwa-action@v1
