@@ -6,6 +6,7 @@ Aplicación web estática para consultar el horario y guardar tareas y exámenes
 
 1. Crea un proyecto en [Supabase](https://supabase.com/).
 2. En el **SQL Editor** del proyecto, ejecuta el contenido de [`supabase/schema.sql`](supabase/schema.sql). Esto crea la tabla `tasks` y sus políticas de seguridad por usuario (RLS).
+   Si la tabla ya existía, ejecuta en su lugar [`supabase/migration-add-week-start.sql`](supabase/migration-add-week-start.sql) para añadir la selección de semanas sin borrar tus tareas.
 3. En **Project Settings > API**, copia la **Project URL** y la clave pública **anon / publishable**.
 4. Pega esos valores en `config.js`:
 
@@ -21,6 +22,8 @@ Aplicación web estática para consultar el horario y guardar tareas y exámenes
 5. Sirve la carpeta con un servidor web estático o publícala en un hosting estático. Abre la URL publicada, crea una cuenta y confirma el correo si Supabase lo solicita. No abras `index.html` directamente como archivo local.
 
 Al pulsar una asignatura puedes añadir una tarea o examen. Los cambios se guardan en Supabase y se vuelven a cargar al iniciar sesión. La edición y el borrado también se sincronizan con la base de datos.
+
+Al crear o editar un apunte puedes activar **Marcar como examen**. La etiqueta `EXAMEN` aparecerá por encima de la tarjeta y puedes guardarlo sin escribir detalles; en ese caso se guardará como `Examen`. También puedes guardarlo para la semana actual o elegir una fecha de otra semana.
 
 La autenticación usa correo y contraseña de Supabase. Si tienes activada la confirmación de correo, configura también la URL de tu web en **Authentication > URL Configuration**.
 

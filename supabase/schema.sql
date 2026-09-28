@@ -5,6 +5,8 @@ create table public.tasks (
     subject text not null,
     message text not null check (char_length(trim(message)) > 0),
     color text not null,
+    week_start date not null default date_trunc('week', current_date)::date,
+    is_exam boolean not null default false,
     created_at timestamptz not null default now()
 );
 

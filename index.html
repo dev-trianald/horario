@@ -28,7 +28,7 @@
         }
 
         h1 {
-            margin-bottom: 30px;
+            margin: 0 0 16px;
             text-shadow: 0 0 10px rgba(255,255,255,0.2);
             color: #4da8da;
         }
@@ -170,10 +170,27 @@
         .task-item {
             background-color: #3d3d3d;
             padding: 12px;
+            margin-top: 8px;
             border-radius: 8px;
             border-left: 5px solid #3498db;
             animation: fadeIn 0.4s ease;
             position: relative;
+        }
+
+        .exam-badge {
+            position: absolute;
+            top: -10px;
+            left: 12px;
+            z-index: 1;
+            margin: 0;
+            padding: 3px 8px;
+            border: 2px solid #2d2d2d;
+            border-radius: 5px;
+            background: #d35400;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: bold;
+            letter-spacing: 0.04em;
         }
 
         .task-header {
@@ -308,6 +325,132 @@
             display: none !important;
         }
 
+        .task-dialog {
+            position: fixed;
+            inset: 0;
+            z-index: 30;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .task-dialog-card {
+            width: min(100%, 430px);
+            padding: 24px;
+            border: 1px solid #456477;
+            border-radius: 12px;
+            background: #2d2d2d;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+            animation: dialogIn 0.2s ease-out;
+        }
+
+        .task-dialog-card h2 {
+            margin: 0 0 6px;
+            color: #4da8da;
+            font-size: 1.35rem;
+        }
+
+        .task-dialog-context {
+            margin: 0 0 16px;
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        .task-dialog textarea {
+            display: block;
+            width: 100%;
+            min-height: 120px;
+            resize: vertical;
+            padding: 12px;
+            border: 1px solid #59636a;
+            border-radius: 8px;
+            outline: none;
+            background: #1e1e1e;
+            color: #fff;
+            font: inherit;
+            line-height: 1.4;
+        }
+
+        .task-dialog textarea:focus {
+            border-color: #4da8da;
+            box-shadow: 0 0 0 3px rgba(77, 168, 218, 0.18);
+        }
+
+        .task-week-options {
+            display: grid;
+            gap: 8px;
+            margin: 14px 0 0;
+        }
+
+        .task-week-options label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ddd;
+            font-size: 0.9rem;
+        }
+
+        .task-week-options input[type="radio"] {
+            accent-color: #4da8da;
+        }
+
+        .task-week-date {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid #59636a;
+            border-radius: 6px;
+            background: #1e1e1e;
+            color: #fff;
+            font: inherit;
+        }
+
+        .exam-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            color: #ffd2b8;
+            cursor: pointer;
+            font-size: 0.92rem;
+        }
+
+        .exam-toggle input {
+            width: 17px;
+            height: 17px;
+            accent-color: #d35400;
+        }
+
+        .task-dialog-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .task-dialog-actions button {
+            padding: 10px 16px;
+            border: 0;
+            border-radius: 6px;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .task-dialog-cancel {
+            background: #4a4a4a;
+            color: #fff;
+        }
+
+        .task-dialog-save {
+            background: #2980b9;
+            color: #fff;
+        }
+
+        @keyframes dialogIn {
+            from { opacity: 0; transform: translateY(8px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -315,17 +458,17 @@
 
         @media (max-width: 900px) {
             body {
-                padding: 14px 10px 24px;
+                padding: 8px 10px 0;
             }
 
             h1 {
-                margin: 6px 0 22px;
+                margin: 0 0 10px;
                 font-size: 1.8rem;
             }
 
             .main-container {
                 align-items: stretch;
-                gap: 18px;
+                gap: 12px;
             }
 
             .schedule-wrapper {
@@ -408,6 +551,24 @@
         </div>
         <p id="auth-status" role="status" aria-live="polite"></p>
     </section>
+
+    <div id="task-dialog" class="task-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="task-dialog-title">
+        <form id="task-dialog-form" class="task-dialog-card">
+            <h2 id="task-dialog-title">Añadir tarea</h2>
+            <p id="task-dialog-context" class="task-dialog-context"></p>
+            <textarea id="task-dialog-input" maxlength="500" placeholder="Escribe aquí los detalles (opcional si marcas examen)..."></textarea>
+            <label class="exam-toggle"><input id="task-dialog-is-exam" type="checkbox"> Marcar como examen</label>
+            <div class="task-week-options">
+                <label><input type="radio" name="task-week" value="current" checked> Esta semana</label>
+                <label><input type="radio" name="task-week" value="other"> Otra semana</label>
+                <input id="task-week-date" class="task-week-date hidden" type="date" aria-label="Fecha de la otra semana">
+            </div>
+            <div class="task-dialog-actions">
+                <button id="task-dialog-cancel" class="task-dialog-cancel" type="button">Cancelar</button>
+                <button class="task-dialog-save" type="submit">Guardar</button>
+            </div>
+        </form>
+    </div>
 
     <div id="app-content" class="main-container hidden">
         <!-- Rejilla del Horario -->
@@ -493,13 +654,22 @@
         const signedInElement = document.getElementById('signed-in');
         const appContent = document.getElementById('app-content');
         const taskListElement = document.getElementById('task-list');
+        const taskDialog = document.getElementById('task-dialog');
+        const taskDialogForm = document.getElementById('task-dialog-form');
+        const taskDialogTitle = document.getElementById('task-dialog-title');
+        const taskDialogContext = document.getElementById('task-dialog-context');
+        const taskDialogInput = document.getElementById('task-dialog-input');
+        const taskDialogIsExam = document.getElementById('task-dialog-is-exam');
+        const taskDialogCancel = document.getElementById('task-dialog-cancel');
+        const taskWeekDate = document.getElementById('task-week-date');
+        const taskWeekChoices = document.querySelectorAll('input[name="task-week"]');
         const supabaseConfig = window.SUPABASE_CONFIG;
         let supabaseClient = null;
         let tasks = [];
 
         let statusTimeout;
 
-        function setStatus(message, duration = 4500) {
+        function setStatus(message, duration = 2000) {
             window.clearTimeout(statusTimeout);
             authStatus.textContent = message;
             authStatus.classList.remove('hidden');
@@ -516,13 +686,97 @@
                 setStatus('Falta crear la tabla de tareas. Ejecuta supabase/schema.sql en el SQL Editor de Supabase.');
                 return;
             }
+            if (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('tasks.week_start') || error.message?.includes("'is_exam' column")) {
+                setStatus('Falta actualizar la tabla. Ejecuta supabase/migration-add-week-start.sql en Supabase.');
+                return;
+            }
             setStatus(`No se pudo guardar el cambio: ${error.message || 'error de conexión'}`);
+        }
+
+        function getWeekStart(date = new Date()) {
+            const result = new Date(date);
+            result.setHours(12, 0, 0, 0);
+            const day = result.getDay();
+            result.setDate(result.getDate() - (day === 0 ? 6 : day - 1));
+            return result;
+        }
+
+        function toDateInputValue(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function formatWeekStart(weekStart) {
+            if (!weekStart) return 'actual';
+            return new Intl.DateTimeFormat('es-ES', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            }).format(new Date(`${weekStart}T12:00:00`));
+        }
+
+        function openTaskDialog({ title, context, value = '', weekStart = null, isExam = false }) {
+            taskDialogTitle.textContent = title;
+            taskDialogContext.textContent = context;
+            taskDialogInput.value = value;
+            taskDialogIsExam.checked = isExam;
+            const selectedWeek = weekStart ? new Date(`${weekStart}T12:00:00`) : getWeekStart();
+            taskWeekChoices.forEach(choice => {
+                choice.checked = choice.value === (weekStart ? 'other' : 'current');
+            });
+            taskWeekDate.value = toDateInputValue(selectedWeek);
+            taskWeekDate.classList.toggle('hidden', !weekStart);
+            taskDialog.classList.remove('hidden');
+            taskDialogInput.focus();
+
+            return new Promise(resolve => {
+                const close = result => {
+                    taskDialog.classList.add('hidden');
+                    taskDialogForm.removeEventListener('submit', submit);
+                    taskDialogCancel.removeEventListener('click', cancel);
+                    taskDialog.removeEventListener('click', outsideClick);
+                    taskWeekChoices.forEach(choice => choice.removeEventListener('change', weekChange));
+                    resolve(result);
+                };
+                const submit = event => {
+                    event.preventDefault();
+                    const message = taskDialogInput.value.trim();
+                    const isExam = taskDialogIsExam.checked;
+                    const selectedChoice = document.querySelector('input[name="task-week"]:checked').value;
+                    const selectedDate = selectedChoice === 'other' && taskWeekDate.value
+                        ? new Date(`${taskWeekDate.value}T12:00:00`)
+                        : getWeekStart();
+                    if (message || isExam) {
+                        close({
+                            message: message || 'Examen',
+                            isExam,
+                            weekStart: toDateInputValue(getWeekStart(selectedDate))
+                        });
+                    }
+                };
+                const cancel = () => close(null);
+                const outsideClick = event => {
+                    if (event.target === taskDialog) close(null);
+                };
+                const weekChange = () => {
+                    const otherWeek = document.querySelector('input[name="task-week"]:checked').value === 'other';
+                    taskWeekDate.classList.toggle('hidden', !otherWeek);
+                    if (otherWeek) taskWeekDate.focus();
+                };
+
+                taskDialogForm.addEventListener('submit', submit);
+                taskDialogCancel.addEventListener('click', cancel);
+                taskDialog.addEventListener('click', outsideClick);
+                taskWeekChoices.forEach(choice => choice.addEventListener('change', weekChange));
+            });
         }
 
         async function loadTasks() {
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .select('id, day, subject, message, color')
+                .select('id, day, subject, message, color, week_start, is_exam')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -607,14 +861,19 @@
                 if (!supabaseClient) return;
                 const day = this.getAttribute('data-day');
                 const subject = this.getAttribute('data-subject');
-                const taskMessage = prompt(`Añadir tarea/examen para ${subject} el ${day}:`);
+                const taskResult = await openTaskDialog({
+                    title: 'Añadir tarea o examen',
+                    context: `${subject} · ${day}`
+                });
 
-                if (taskMessage && taskMessage.trim() !== "") {
+                if (taskResult) {
                     const { error } = await supabaseClient.from('tasks').insert({
                         day: day,
                         subject: subject,
-                        message: taskMessage.trim(),
-                        color: window.getComputedStyle(this).backgroundColor
+                        message: taskResult.message,
+                        color: window.getComputedStyle(this).backgroundColor,
+                        week_start: taskResult.weekStart,
+                        is_exam: taskResult.isExam
                     });
                     if (error) showTaskError(error);
                     else await loadTasks().catch(showTaskError);
@@ -625,11 +884,21 @@
         async function editTask(id) {
             const task = tasks.find(t => t.id === id);
             if(task) {
-                const newMessage = prompt(`Editando tarea de ${task.subject} (${task.day}):`, task.message);
-                if (newMessage && newMessage.trim() !== "") {
+                const taskResult = await openTaskDialog({
+                    title: 'Editar tarea o examen',
+                    context: `${task.subject} · ${task.day}`,
+                    value: task.message,
+                    weekStart: task.week_start,
+                    isExam: task.is_exam
+                });
+                if (taskResult) {
                     const { error } = await supabaseClient
                         .from('tasks')
-                        .update({ message: newMessage.trim() })
+                        .update({
+                            message: taskResult.message,
+                            week_start: taskResult.weekStart,
+                            is_exam: taskResult.isExam
+                        })
                         .eq('id', id);
                     if (error) showTaskError(error);
                     else await loadTasks().catch(showTaskError);
@@ -661,7 +930,13 @@
                 const header = document.createElement('div');
                 header.className = 'task-header';
                 const label = document.createElement('span');
-                label.textContent = `${task.day} - ${task.subject}`;
+                label.textContent = `${task.day} - ${task.subject} · semana ${formatWeekStart(task.week_start)}`;
+                if (task.is_exam) {
+                    const badge = document.createElement('span');
+                    badge.className = 'exam-badge';
+                    badge.textContent = 'EXAMEN';
+                    taskDiv.appendChild(badge);
+                }
                 const actions = document.createElement('div');
                 actions.className = 'task-actions';
 
