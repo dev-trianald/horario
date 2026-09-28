@@ -1,22 +1,21 @@
 name: Generar APK de TaskDAM
 
 on:
-  push:
-    branches:
-      - main
-      - master
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["pages-build-deployment"]
+    types:
+      - completed
+  workflow_dispatch: # Mantiene la opción de ejecutarlo a mano
 
 jobs:
   build-android:
+    # Solo se ejecuta si el despliegue previo fue un éxito o si lo lanzas a mano
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
-
-      - name: Esperar despliegue de GitHub Pages
-        run: sleep 20
 
       - name: Generar paquete APK desde PWA
         uses: pwa-builder/pwa-action@v1
