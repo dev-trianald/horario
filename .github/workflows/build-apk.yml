@@ -1,0 +1,33 @@
+name: Generar APK de TaskDAM
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub si quieres
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Generar paquete APK desde PWA
+        uses: pwa-builder/pwa-action@v1
+        with:
+          manifest-url: 'https://dev-trianald.github.io/horario/manifest.webmanifest'
+
+      - name: Guardar APK como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskDAM-APK
+          path: '**/*.apk'
