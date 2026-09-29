@@ -7,6 +7,7 @@ create table public.tasks (
     color text not null,
     week_start date not null default date_trunc('week', current_date)::date,
     is_exam boolean not null default false,
+    completed boolean not null default false,
     created_at timestamptz not null default now()
 );
 

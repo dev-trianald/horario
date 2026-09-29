@@ -25,7 +25,29 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-height: 100vh;
             overflow-x: hidden;
+        }
+
+        .legal-footer {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            width: min(100%, 1400px);
+            margin-top: auto;
+            padding-top: 18px;
+            color: #858585;
+            font-size: 0.75rem;
+        }
+
+        .legal-footer a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .legal-footer a:hover {
+            color: #4da8da;
+            text-decoration: underline;
         }
 
         h1 {
@@ -160,6 +182,34 @@
             border-bottom: 2px solid #555;
             padding-bottom: 10px;
             color: #ddd;
+        }
+
+        .tasks-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .tasks-panel-header h2 {
+            flex: 1;
+        }
+
+        .history-button {
+            flex: none;
+            padding: 7px 10px;
+            border: 1px solid #59636a;
+            border-radius: 6px;
+            background: #3d3d3d;
+            color: #ddd;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.85rem;
+        }
+
+        .history-button:hover {
+            border-color: #4da8da;
+            color: #fff;
         }
 
         #task-list {
@@ -548,6 +598,7 @@
             <button type="submit" value="signup">Crear cuenta</button>
         </form>
         <div id="signed-in" class="auth-actions hidden">
+            <button id="google-calendar-button" type="button">Conectar Google Calendar</button>
             <button id="signout-button" type="button">Cerrar sesión</button>
         </div>
         <p id="auth-status" role="status" aria-live="polite"></p>
@@ -639,7 +690,10 @@
 
         <!-- Panel de Tareas -->
         <div class="tasks-panel">
-            <h2>Tareas y Exámenes</h2>
+            <div class="tasks-panel-header">
+                <h2 id="tasks-panel-title">Tareas y Exámenes</h2>
+                <button id="history-button" class="history-button" type="button">Historial</button>
+            </div>
             <div id="task-list">
                 <div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>
             </div>
@@ -653,8 +707,11 @@
         const authPanel = document.querySelector('.auth-panel');
         const authStatus = document.getElementById('auth-status');
         const signedInElement = document.getElementById('signed-in');
+        const googleCalendarButton = document.getElementById('google-calendar-button');
         const appContent = document.getElementById('app-content');
         const taskListElement = document.getElementById('task-list');
+        const tasksPanelTitle = document.getElementById('tasks-panel-title');
+        const historyButton = document.getElementById('history-button');
         const taskDialog = document.getElementById('task-dialog');
         const taskDialogForm = document.getElementById('task-dialog-form');
         const taskDialogTitle = document.getElementById('task-dialog-title');
@@ -667,6 +724,11 @@
         const supabaseConfig = window.SUPABASE_CONFIG;
         let supabaseClient = null;
         let tasks = [];
+        let showingHistory = false;
+        let signedInEmail = '';
+        let googleAccessToken = null;
+        let googleCalendarEmail = '';
+        let googleIdentityServicesPromise = null;
 
         let statusTimeout;
 
@@ -681,10 +743,152 @@
             }, duration);
         }
 
+        function updateGoogleCalendarButton() {
+            const connected = Boolean(googleAccessToken && googleCalendarEmail);
+            googleCalendarButton.textContent = connected
+                ? 'Google Calendar conectado'
+                : 'Conectar Google Calendar';
+            googleCalendarButton.title = connected
+                ? `Cuenta: ${googleCalendarEmail}. Pulsa para desconectar.`
+                : 'Conectar con la misma cuenta que has usado para iniciar sesión.';
+            googleCalendarButton.setAttribute('aria-pressed', String(connected));
+        }
+
+        function loadGoogleIdentityServices() {
+            if (!window.SUPABASE_CONFIG?.googleClientId) {
+                throw new Error('Añade el ID de cliente OAuth de Google en config.js para conectar Calendar.');
+            }
+            if (window.google?.accounts?.oauth2) return Promise.resolve();
+            if (googleIdentityServicesPromise) return googleIdentityServicesPromise;
+
+            googleIdentityServicesPromise = new Promise((resolve, reject) => {
+                let script = document.querySelector('script[data-google-identity]');
+                if (!script) {
+                    script = document.createElement('script');
+                    script.src = 'https://accounts.google.com/gsi/client';
+                    script.async = true;
+                    script.defer = true;
+                    script.dataset.googleIdentity = 'true';
+                    document.head.appendChild(script);
+                }
+                script.addEventListener('load', resolve, { once: true });
+                script.addEventListener('error', () => reject(new Error('No se pudo cargar la conexión segura de Google.')), { once: true });
+                if (window.google?.accounts?.oauth2) resolve();
+            });
+            return googleIdentityServicesPromise;
+        }
+
+        async function requestGoogleAccessToken() {
+            if (!window.google?.accounts?.oauth2) await loadGoogleIdentityServices();
+            return new Promise((resolve, reject) => {
+                const tokenClient = window.google.accounts.oauth2.initTokenClient({
+                    client_id: window.SUPABASE_CONFIG.googleClientId,
+                    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email',
+                    callback: response => {
+                        if (response.error) {
+                            reject(new Error(response.error_description || response.error));
+                            return;
+                        }
+                        resolve(response.access_token);
+                    },
+                    error_callback: error => reject(new Error(error.message || 'Google no pudo completar la autorización.'))
+                });
+                tokenClient.requestAccessToken({ prompt: 'consent', login_hint: signedInEmail });
+            });
+        }
+
+        if (window.SUPABASE_CONFIG?.googleClientId) {
+            googleCalendarButton.disabled = true;
+            loadGoogleIdentityServices()
+                .catch(() => {})
+                .finally(() => { googleCalendarButton.disabled = false; });
+        }
+
+        async function connectGoogleCalendar() {
+            if (googleAccessToken) {
+                window.google.accounts.oauth2.revoke(googleAccessToken);
+                googleAccessToken = null;
+                googleCalendarEmail = '';
+                updateGoogleCalendarButton();
+                setStatus('Google Calendar desconectado.');
+                return;
+            }
+
+            googleCalendarButton.disabled = true;
+            setStatus('Esperando autorización de Google…', 5000);
+            try {
+                const accessToken = await requestGoogleAccessToken();
+                const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+                if (!response.ok) throw new Error('No se pudo verificar la cuenta de Google.');
+                const profile = await response.json();
+                const googleEmail = profile.email?.trim().toLowerCase();
+                if (!googleEmail || googleEmail !== signedInEmail.toLowerCase()) {
+                    window.google.accounts.oauth2.revoke(accessToken);
+                    throw new Error(`Autoriza Google con el mismo correo de la app: ${signedInEmail}.`);
+                }
+                googleAccessToken = accessToken;
+                googleCalendarEmail = profile.email;
+                updateGoogleCalendarButton();
+                setStatus(`Google Calendar conectado: ${profile.email}.`, 5000);
+            } catch (error) {
+                setStatus(error.message || 'No se pudo conectar Google Calendar.', 5000);
+            } finally {
+                googleCalendarButton.disabled = false;
+            }
+        }
+
+        async function syncTaskToGoogleCalendar(task) {
+            const dayOffsets = { Lunes: 0, Martes: 1, Miércoles: 2, Jueves: 3, Viernes: 4 };
+            if (!(task.day in dayOffsets)) throw new Error('No se reconoce el día de esta tarea.');
+
+            const start = new Date(`${task.week_start}T00:00:00Z`);
+            start.setUTCDate(start.getUTCDate() + dayOffsets[task.day]);
+            const startDate = start.toISOString().slice(0, 10);
+            const end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + 1);
+            const eventId = task.id.replaceAll('-', '').toLowerCase();
+            const event = {
+                id: eventId,
+                summary: `${task.is_exam ? 'Examen' : 'Tarea'} · ${task.subject}: ${task.message}`,
+                description: `Apunte de TaskDAM\nAsignatura: ${task.subject}\nDía: ${task.day}`,
+                start: { date: startDate },
+                end: { date: end.toISOString().slice(0, 10) },
+                extendedProperties: { private: { taskdamTaskId: String(task.id) } }
+            };
+            const endpoint = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`;
+            const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${googleAccessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(event)
+            });
+
+            if (response.status === 409) {
+                const existingResponse = await fetch(endpoint, {
+                    headers: { Authorization: `Bearer ${googleAccessToken}` }
+                });
+                const existingEvent = existingResponse.ok ? await existingResponse.json() : null;
+                if (existingEvent?.extendedProperties?.private?.taskdamTaskId === String(task.id)) return;
+            } else if (response.ok) {
+                return;
+            }
+
+            const details = await response.json().catch(() => ({}));
+            throw new Error(details.error?.message || 'No se pudo crear el evento en Google Calendar.');
+        }
+
         function showTaskError(error) {
             console.error(error);
             if (error.code === 'PGRST205') {
                 setStatus('Falta crear la tabla de tareas. Ejecuta supabase/schema.sql en el SQL Editor de Supabase.');
+                return;
+            }
+            if (error.message?.includes('completed')) {
+                setStatus('Falta actualizar la tabla. Ejecuta supabase/migration-add-completed.sql en Supabase.');
                 return;
             }
             if (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('tasks.week_start') || error.message?.includes("'is_exam' column")) {
@@ -777,7 +981,7 @@
         async function loadTasks() {
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .select('id, day, subject, message, color, week_start, is_exam')
+                .select('id, day, subject, message, color, week_start, is_exam, completed')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -787,13 +991,19 @@
 
         async function applySession(session) {
             const isSignedIn = Boolean(session);
+            signedInEmail = session?.user?.email || '';
             authPanel.classList.toggle('is-authenticated', isSignedIn);
             authForm.classList.toggle('hidden', isSignedIn);
             signedInElement.classList.toggle('hidden', !isSignedIn);
             appContent.classList.toggle('hidden', !isSignedIn);
 
             if (!isSignedIn) {
+                googleAccessToken = null;
+                googleCalendarEmail = '';
+                updateGoogleCalendarButton();
                 tasks = [];
+                showingHistory = false;
+                updateHistoryButton();
                 updateTasksPanel();
                 return;
             }
@@ -857,6 +1067,14 @@
             if (error) showTaskError(error);
         });
 
+        googleCalendarButton.addEventListener('click', connectGoogleCalendar);
+
+        historyButton.addEventListener('click', () => {
+            showingHistory = !showingHistory;
+            updateHistoryButton();
+            updateTasksPanel();
+        });
+
         document.querySelectorAll('.subject').forEach(cell => {
             cell.addEventListener('click', async function() {
                 if (!supabaseClient) return;
@@ -868,16 +1086,28 @@
                 });
 
                 if (taskResult) {
-                    const { error } = await supabaseClient.from('tasks').insert({
+                    const { data, error } = await supabaseClient.from('tasks').insert({
                         day: day,
                         subject: subject,
                         message: taskResult.message,
                         color: window.getComputedStyle(this).backgroundColor,
                         week_start: taskResult.weekStart,
                         is_exam: taskResult.isExam
-                    });
+                    }).select('id, day, subject, message, week_start, is_exam').single();
                     if (error) showTaskError(error);
-                    else await loadTasks().catch(showTaskError);
+                    else {
+                        await loadTasks().catch(showTaskError);
+                        if (googleAccessToken) {
+                            try {
+                                await syncTaskToGoogleCalendar(data);
+                                setStatus('Tarea guardada y sincronizada con Google Calendar.', 4000);
+                            } catch (syncError) {
+                                setStatus(`Tarea guardada, pero no se pudo sincronizar: ${syncError.message}`, 6000);
+                            }
+                        } else {
+                            setStatus('Tarea guardada. Conecta Google Calendar para sincronizarla automáticamente.', 5000);
+                        }
+                    }
                 }
             });
         });
@@ -915,15 +1145,34 @@
             }
         }
 
+        async function toggleTaskCompleted(id, completed) {
+            const { error } = await supabaseClient
+                .from('tasks')
+                .update({ completed })
+                .eq('id', id);
+            if (error) showTaskError(error);
+            else await loadTasks().catch(showTaskError);
+        }
+
+        function updateHistoryButton() {
+            historyButton.textContent = showingHistory ? 'Ver pendientes' : 'Historial';
+            historyButton.setAttribute('aria-pressed', String(showingHistory));
+            tasksPanelTitle.textContent = showingHistory ? 'Historial' : 'Tareas y Exámenes';
+        }
+
         function updateTasksPanel() {
-            if (tasks.length === 0) {
-                taskListElement.innerHTML = '<div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>';
+            const visibleTasks = tasks.filter(task => Boolean(task.completed) === showingHistory);
+            if (visibleTasks.length === 0) {
+                const emptyMessage = showingHistory
+                    ? 'Todavía no hay tareas completadas.'
+                    : 'Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!';
+                taskListElement.innerHTML = `<div class="no-tasks">${emptyMessage}</div>`;
                 return;
             }
             
             taskListElement.replaceChildren();
 
-            tasks.forEach(task => {
+            visibleTasks.forEach(task => {
                 const taskDiv = document.createElement('div');
                 taskDiv.className = 'task-item';
                 taskDiv.style.borderLeftColor = task.color;
@@ -940,6 +1189,14 @@
                 }
                 const actions = document.createElement('div');
                 actions.className = 'task-actions';
+
+                const completeButton = document.createElement('button');
+                completeButton.className = 'action-btn';
+                completeButton.title = task.completed ? 'Reabrir tarea' : 'Marcar como completada';
+                completeButton.setAttribute('aria-label', completeButton.title);
+                completeButton.type = 'button';
+                completeButton.textContent = task.completed ? '↶' : '✓';
+                completeButton.addEventListener('click', () => toggleTaskCompleted(task.id, !task.completed));
 
                 const editButton = document.createElement('button');
                 editButton.className = 'action-btn';
@@ -958,12 +1215,17 @@
                 const message = document.createElement('div');
                 message.className = 'task-text';
                 message.textContent = task.message;
-                actions.append(editButton, deleteButton);
+                actions.append(completeButton, editButton, deleteButton);
                 header.append(label, actions);
                 taskDiv.append(header, message);
                 taskListElement.appendChild(taskDiv);
             });
         }
     </script>
+    <footer class="legal-footer" aria-label="Información legal">
+        <a href="./pages/privacidad.html">Privacidad</a>
+        <span aria-hidden="true">·</span>
+        <a href="./pages/terminos.html">Condiciones del servicio</a>
+    </footer>
 </body>
 </html>

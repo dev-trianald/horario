@@ -6,7 +6,7 @@ Aplicación web estática para consultar el horario y guardar tareas y exámenes
 
 1. Crea un proyecto en [Supabase](https://supabase.com/).
 2. En el **SQL Editor** del proyecto, ejecuta el contenido de [`supabase/schema.sql`](supabase/schema.sql). Esto crea la tabla `tasks` y sus políticas de seguridad por usuario (RLS).
-   Si la tabla ya existía, ejecuta en su lugar [`supabase/migration-add-week-start.sql`](supabase/migration-add-week-start.sql) para añadir la selección de semanas sin borrar tus tareas.
+   Si la tabla ya existía, ejecuta [`supabase/migration-add-week-start.sql`](supabase/migration-add-week-start.sql) y [`supabase/migration-add-completed.sql`](supabase/migration-add-completed.sql) para añadir las columnas nuevas sin borrar tus tareas.
 3. En **Project Settings > API**, copia la **Project URL** y la clave pública **anon / publishable**.
 4. Pega esos valores en `config.js`:
 
@@ -24,6 +24,20 @@ Aplicación web estática para consultar el horario y guardar tareas y exámenes
 Al pulsar una asignatura puedes añadir una tarea o examen. Los cambios se guardan en Supabase y se vuelven a cargar al iniciar sesión. La edición y el borrado también se sincronizan con la base de datos.
 
 Al crear o editar un apunte puedes activar **Marcar como examen**. La etiqueta `EXAMEN` aparecerá por encima de la tarjeta y puedes guardarlo sin escribir detalles; en ese caso se guardará como `Examen`. También puedes guardarlo para la semana actual o elegir una fecha de otra semana.
+
+Marca una tarea con el botón de check para moverla al **Historial** del panel lateral. Desde el historial puedes reabrirla y devolverla a pendientes.
+
+## Sincronizar con Google Calendar
+
+La sincronización necesita que cada usuario autorice Google Calendar con la misma dirección de correo usada para iniciar sesión en la app. Al conectar, la app solicita permiso para crear eventos y verifica que ambas cuentas coincidan. Las tareas y los exámenes se añaden como eventos de día completo en el día de la asignatura; no se envían a Google hasta que el usuario conecta su cuenta.
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), crea o selecciona un proyecto y habilita **Google Calendar API**.
+2. Configura la pantalla de consentimiento OAuth. Si la app está en modo de pruebas, añade como usuario de prueba cada cuenta que vaya a conectar Calendar.
+3. Crea un **OAuth Client ID** de tipo **Web application**. Añade el dominio publicado de la app en **Authorized JavaScript origins**. Para desarrollo local, añade también el origen local que uses, por ejemplo `http://localhost:8000`.
+4. Copia el ID de cliente (termina en `.apps.googleusercontent.com`) en `googleClientId` dentro de `config.js`. Este ID es público; no pegues secretos OAuth ni claves privadas en la web.
+5. Publica la app y pulsa **Conectar Google Calendar** después de iniciar sesión. Google mostrará el consentimiento. La dirección de Google debe coincidir con el correo de Supabase.
+
+La app conserva el permiso solo en memoria del navegador; puede ser necesario volver a conectar tras recargar o cerrar sesión. Si una tarea se guarda pero Google no está conectado, la app lo indicará y no la enviará a Google automáticamente hasta que se cree otra tarea.
 
 La autenticación usa correo y contraseña de Supabase. Si tienes activada la confirmación de correo, configura también la URL de tu web en **Authentication > URL Configuration**.
 

@@ -25,6 +25,8 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
+    if (new URL(event.request.url).origin !== self.location.origin) return;
+    if (event.request.headers.has('authorization')) return;
 
     event.respondWith(
         fetch(event.request)
