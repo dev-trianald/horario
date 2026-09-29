@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TaskDAM - Horario, tareas y exámenes de 2º DAM</title>
-    <meta name="description" content="TaskDAM permite consultar el horario de 2º DAM y guardar tareas y exámenes, con sincronización opcional con Google Calendar.">
+    <meta name="description" content="TaskDAM permite consultar el horario de 2º DAM y guardar tareas, exámenes y recordatorios por asignatura.">
     <link rel="icon" type="image/svg+xml" href="./icons/horario.svg?v=1">
     <meta name="theme-color" content="#1e1e1e">
     <meta name="apple-mobile-web-app-title" content="TaskDAM">
@@ -76,18 +76,29 @@
         }
 
         .main-container {
-            display: flex;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(420px, 590px);
             gap: 30px;
-            flex-wrap: wrap;
             justify-content: center;
             max-width: 1400px;
             width: 100%;
         }
 
+        .side-panels {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 30px;
+            width: min(100%, 590px);
+            height: 631px;
+            min-width: 0;
+            justify-self: start;
+        }
+
         .schedule-grid {
             display: grid;
-            grid-template-columns: 110px repeat(5, 120px);
+            grid-template-columns: 80px repeat(5, minmax(0, 1fr));
             gap: 8px;
+            width: 100%;
             background-color: #2d2d2d;
             padding: 15px;
             border-radius: 12px;
@@ -96,7 +107,7 @@
 
         .schedule-wrapper {
             max-width: 100%;
-            overflow-x: auto;
+            overflow: hidden;
             padding: 2px;
         }
 
@@ -190,9 +201,17 @@
             background-color: #2d2d2d;
             padding: 20px;
             border-radius: 12px;
-            width: 350px;
+            width: 100%;
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-            height: fit-content;
+            min-width: 0;
+            min-height: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .reminders-panel {
+            width: 100%;
         }
 
         .tasks-panel h2 {
@@ -212,6 +231,18 @@
 
         .tasks-panel-header h2 {
             flex: 1;
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .reminders-panel .tasks-panel-header {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .reminders-panel .tasks-panel-header h2 {
+            grid-column: 1 / -1;
         }
 
         .history-button {
@@ -224,6 +255,8 @@
             cursor: pointer;
             font: inherit;
             font-size: 0.85rem;
+            min-width: 0;
+            white-space: nowrap;
         }
 
         .history-button:hover {
@@ -231,10 +264,48 @@
             color: #fff;
         }
 
-        #task-list {
+        #task-list, #reminder-list {
             display: flex;
             flex-direction: column;
             gap: 12px;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 2px 6px 2px 0;
+            scrollbar-color: #5d7180 #292929;
+            scrollbar-width: thin;
+        }
+
+        #task-list::-webkit-scrollbar, #reminder-list::-webkit-scrollbar {
+            width: 7px;
+        }
+
+        #task-list::-webkit-scrollbar-track, #reminder-list::-webkit-scrollbar-track {
+            border-radius: 8px;
+            background: #292929;
+        }
+
+        #task-list::-webkit-scrollbar-thumb, #reminder-list::-webkit-scrollbar-thumb {
+            border: 2px solid #292929;
+            border-radius: 8px;
+            background: #5d7180;
+        }
+
+        #task-list::-webkit-scrollbar-thumb:hover, #reminder-list::-webkit-scrollbar-thumb:hover {
+            background: #70b7d8;
+        }
+
+        .panel-add-button {
+            flex: none;
+            padding: 7px 10px;
+            border: 1px solid #59636a;
+            border-radius: 6px;
+            background: #2980b9;
+            color: #fff;
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.85rem;
+            min-width: 0;
+            white-space: nowrap;
         }
 
         .task-item {
@@ -466,6 +537,18 @@
             box-shadow: 0 0 0 3px rgba(77, 168, 218, 0.18);
         }
 
+        .reminder-subject {
+            display: block;
+            width: 100%;
+            margin-bottom: 12px;
+            padding: 10px;
+            border: 1px solid #59636a;
+            border-radius: 8px;
+            background: #1e1e1e;
+            color: #fff;
+            font: inherit;
+        }
+
         .task-week-options {
             display: grid;
             gap: 8px;
@@ -550,6 +633,11 @@
                 padding: 8px 10px 0;
             }
 
+            .main-container {
+                display: flex;
+                flex-direction: column;
+            }
+
             h1 {
                 margin: 0 0 10px;
                 font-size: 1.8rem;
@@ -566,6 +654,21 @@
 
             .tasks-panel {
                 width: 100%;
+            }
+
+            .side-panels {
+                grid-template-columns: minmax(0, 1fr);
+                width: 100%;
+                height: auto;
+            }
+
+            .tasks-panel {
+                height: fit-content;
+            }
+
+            #task-list, #reminder-list {
+                max-height: none;
+                overflow-y: visible;
             }
         }
 
@@ -627,7 +730,7 @@
 <body>
 
     <h1>TaskDAM</h1>
-    <p class="app-description">Aplicación web para estudiantes de 2º DAM: consulta el horario semanal sin iniciar sesión y, tras iniciar sesión, guarda y organiza tareas y exámenes. Si conectas Google Calendar, TaskDAM sincroniza sus eventos.</p>
+    <p class="app-description">Aplicación web para estudiantes de 2º DAM: consulta el horario semanal sin iniciar sesión y, tras iniciar sesión, organiza tareas, exámenes y recordatorios por asignatura.</p>
 
     <section class="auth-panel" aria-label="Cuenta de Supabase">
         <form id="auth-form">
@@ -656,6 +759,31 @@
             </div>
             <div class="task-dialog-actions">
                 <button id="task-dialog-cancel" class="task-dialog-cancel" type="button">Cancelar</button>
+                <button class="task-dialog-save" type="submit">Guardar</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="reminder-dialog" class="task-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="reminder-dialog-title">
+        <form id="reminder-dialog-form" class="task-dialog-card">
+            <h2 id="reminder-dialog-title">Añadir recordatorio</h2>
+            <p class="task-dialog-context">Guarda una idea o contenido importante sin asignarle fecha.</p>
+            <label for="reminder-subject">Asignatura</label>
+            <select id="reminder-subject" class="reminder-subject" required>
+                <option value="">Selecciona una asignatura</option>
+                <option>IP2</option>
+                <option>PSP</option>
+                <option>SGE</option>
+                <option>PMDM</option>
+                <option>PI</option>
+                <option>DI</option>
+                <option>ING</option>
+                <option>AD</option>
+                <option>LD</option>
+            </select>
+            <textarea id="reminder-dialog-input" maxlength="500" placeholder="Ej.: Entra el tema 3 y los patrones de diseño" required></textarea>
+            <div class="task-dialog-actions">
+                <button id="reminder-dialog-cancel" class="task-dialog-cancel" type="button">Cancelar</button>
                 <button class="task-dialog-save" type="submit">Guardar</button>
             </div>
         </form>
@@ -727,14 +855,27 @@
         </div>
         </div>
 
-        <!-- Panel de Tareas -->
-        <div id="tasks-panel" class="tasks-panel hidden">
-            <div class="tasks-panel-header">
-                <h2 id="tasks-panel-title">Tareas y Exámenes</h2>
-                <button id="history-button" class="history-button" type="button">Historial</button>
+        <div class="side-panels">
+            <!-- Panel de Tareas -->
+            <div id="tasks-panel" class="tasks-panel hidden">
+                <div class="tasks-panel-header">
+                    <h2 id="tasks-panel-title">Tareas y Exámenes</h2>
+                    <button id="history-button" class="history-button" type="button">Historial</button>
+                </div>
+                <div id="task-list">
+                    <div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>
+                </div>
             </div>
-            <div id="task-list">
-                <div class="no-tasks">Todavía no has apuntado ninguna tarea. ¡Haz clic en alguna clase!</div>
+
+            <div id="reminders-panel" class="tasks-panel reminders-panel hidden">
+                <div class="tasks-panel-header">
+                    <h2 id="reminders-panel-title">Recordatorios</h2>
+                    <button id="reminder-add-button" class="panel-add-button" type="button">Añadir</button>
+                    <button id="reminder-history-button" class="history-button" type="button">Historial</button>
+                </div>
+                <div id="reminder-list">
+                    <div class="no-tasks">Todavía no has guardado ningún recordatorio.</div>
+                </div>
             </div>
         </div>
     </div>
@@ -751,6 +892,11 @@
         const taskListElement = document.getElementById('task-list');
         const tasksPanelTitle = document.getElementById('tasks-panel-title');
         const historyButton = document.getElementById('history-button');
+        const remindersPanel = document.getElementById('reminders-panel');
+        const reminderListElement = document.getElementById('reminder-list');
+        const remindersPanelTitle = document.getElementById('reminders-panel-title');
+        const reminderAddButton = document.getElementById('reminder-add-button');
+        const reminderHistoryButton = document.getElementById('reminder-history-button');
         const taskDialog = document.getElementById('task-dialog');
         const taskDialogForm = document.getElementById('task-dialog-form');
         const taskDialogTitle = document.getElementById('task-dialog-title');
@@ -760,10 +906,17 @@
         const taskDialogCancel = document.getElementById('task-dialog-cancel');
         const taskWeekDate = document.getElementById('task-week-date');
         const taskWeekChoices = document.querySelectorAll('input[name="task-week"]');
+        const reminderDialog = document.getElementById('reminder-dialog');
+        const reminderDialogForm = document.getElementById('reminder-dialog-form');
+        const reminderDialogInput = document.getElementById('reminder-dialog-input');
+        const reminderDialogSubject = document.getElementById('reminder-subject');
+        const reminderDialogCancel = document.getElementById('reminder-dialog-cancel');
         const supabaseConfig = window.SUPABASE_CONFIG;
         let supabaseClient = null;
         let tasks = [];
+        let reminders = [];
         let showingHistory = false;
+        let showingReminderHistory = false;
         let signedInEmail = '';
         let googleAccessToken = null;
         let googleCalendarEmail = '';
@@ -952,6 +1105,15 @@
             setStatus(`No se pudo guardar el cambio: ${error.message || 'error de conexión'}`);
         }
 
+        function showReminderError(error) {
+            console.error(error);
+            if (error.code === 'PGRST205') {
+                setStatus('Falta crear la tabla de recordatorios. Ejecuta supabase/migration-add-reminders.sql en Supabase.');
+                return;
+            }
+            setStatus(`No se pudo guardar el recordatorio: ${error.message || 'error de conexión'}`);
+        }
+
         function getWeekStart(date = new Date()) {
             const result = new Date(date);
             result.setHours(12, 0, 0, 0);
@@ -1043,6 +1205,49 @@
             updateTasksPanel();
         }
 
+        async function loadReminders() {
+            const { data, error } = await supabaseClient
+                .from('reminders')
+                .select('id, subject, message, completed, created_at')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            reminders = data;
+            updateReminderHistoryButton();
+            updateRemindersPanel();
+        }
+
+        function openReminderDialog({ title, subject = '', value = '' }) {
+            document.getElementById('reminder-dialog-title').textContent = title;
+            reminderDialogSubject.value = subject;
+            reminderDialogInput.value = value;
+            reminderDialog.classList.remove('hidden');
+            reminderDialogSubject.focus();
+
+            return new Promise(resolve => {
+                const close = result => {
+                    reminderDialog.classList.add('hidden');
+                    reminderDialogForm.removeEventListener('submit', submit);
+                    reminderDialogCancel.removeEventListener('click', cancel);
+                    reminderDialog.removeEventListener('click', outsideClick);
+                    resolve(result);
+                };
+                const submit = event => {
+                    event.preventDefault();
+                    const message = reminderDialogInput.value.trim();
+                    const selectedSubject = reminderDialogSubject.value;
+                    if (selectedSubject && message) close({ subject: selectedSubject, message });
+                };
+                const cancel = () => close(null);
+                const outsideClick = event => {
+                    if (event.target === reminderDialog) close(null);
+                };
+                reminderDialogForm.addEventListener('submit', submit);
+                reminderDialogCancel.addEventListener('click', cancel);
+                reminderDialog.addEventListener('click', outsideClick);
+            });
+        }
+
         async function applySession(session) {
             const isSignedIn = Boolean(session);
             signedInEmail = session?.user?.email || '';
@@ -1050,24 +1255,26 @@
             authForm.classList.toggle('hidden', isSignedIn);
             signedInElement.classList.toggle('hidden', !isSignedIn);
             tasksPanel.classList.toggle('hidden', !isSignedIn);
+            remindersPanel.classList.toggle('hidden', !isSignedIn);
 
             if (!isSignedIn) {
                 googleAccessToken = null;
                 googleCalendarEmail = '';
                 updateGoogleCalendarButton();
                 tasks = [];
+                reminders = [];
                 showingHistory = false;
+                showingReminderHistory = false;
                 updateHistoryButton();
+                updateReminderHistoryButton();
                 updateTasksPanel();
+                updateRemindersPanel();
                 return;
             }
 
             setStatus('Sesión iniciada.');
-            try {
-                await loadTasks();
-            } catch (error) {
-                showTaskError(error);
-            }
+            await loadTasks().catch(showTaskError);
+            await loadReminders().catch(showReminderError);
         }
 
         if (!window.supabase || !supabaseConfig?.url || !supabaseConfig?.anonKey) {
@@ -1127,6 +1334,21 @@
             showingHistory = !showingHistory;
             updateHistoryButton();
             updateTasksPanel();
+        });
+
+        reminderAddButton.addEventListener('click', async () => {
+            const reminderResult = await openReminderDialog({ title: 'Añadir recordatorio' });
+            if (!reminderResult) return;
+
+            const { error } = await supabaseClient.from('reminders').insert(reminderResult);
+            if (error) showReminderError(error);
+            else await loadReminders().catch(showReminderError);
+        });
+
+        reminderHistoryButton.addEventListener('click', () => {
+            showingReminderHistory = !showingReminderHistory;
+            updateReminderHistoryButton();
+            updateRemindersPanel();
         });
 
         document.querySelectorAll('.subject').forEach(cell => {
@@ -1255,10 +1477,107 @@
             else await loadTasks().catch(showTaskError);
         }
 
+        async function editReminder(id) {
+            const reminder = reminders.find(item => item.id === id);
+            if (!reminder) return;
+            const result = await openReminderDialog({
+                title: 'Editar recordatorio',
+                subject: reminder.subject,
+                value: reminder.message
+            });
+            if (!result) return;
+
+            const { error } = await supabaseClient
+                .from('reminders')
+                .update(result)
+                .eq('id', id);
+            if (error) showReminderError(error);
+            else await loadReminders().catch(showReminderError);
+        }
+
+        async function deleteReminder(id) {
+            if (!confirm('¿Seguro que quieres borrar este recordatorio?')) return;
+            const { error } = await supabaseClient.from('reminders').delete().eq('id', id);
+            if (error) showReminderError(error);
+            else await loadReminders().catch(showReminderError);
+        }
+
+        async function toggleReminderCompleted(id, completed) {
+            const { error } = await supabaseClient
+                .from('reminders')
+                .update({ completed })
+                .eq('id', id);
+            if (error) showReminderError(error);
+            else await loadReminders().catch(showReminderError);
+        }
+
         function updateHistoryButton() {
             historyButton.textContent = showingHistory ? 'Ver pendientes' : 'Historial';
             historyButton.setAttribute('aria-pressed', String(showingHistory));
             tasksPanelTitle.textContent = showingHistory ? 'Historial' : 'Tareas y Exámenes';
+        }
+
+        function updateReminderHistoryButton() {
+            reminderHistoryButton.textContent = showingReminderHistory ? 'Ver pendientes' : 'Historial';
+            reminderHistoryButton.setAttribute('aria-pressed', String(showingReminderHistory));
+            remindersPanelTitle.textContent = showingReminderHistory ? 'Recordatorios completados' : 'Recordatorios';
+        }
+
+        function updateRemindersPanel() {
+            const visibleReminders = reminders.filter(reminder => Boolean(reminder.completed) === showingReminderHistory);
+            if (visibleReminders.length === 0) {
+                const emptyMessage = showingReminderHistory
+                    ? 'Todavía no hay recordatorios completados.'
+                    : 'Todavía no has guardado ningún recordatorio.';
+                reminderListElement.innerHTML = `<div class="no-tasks">${emptyMessage}</div>`;
+                return;
+            }
+
+            reminderListElement.replaceChildren();
+            visibleReminders.forEach(reminder => {
+                const reminderDiv = document.createElement('div');
+                reminderDiv.className = 'task-item';
+                const subjectCell = document.querySelector(`.subject[data-subject="${reminder.subject}"]`);
+                if (subjectCell) reminderDiv.style.borderLeftColor = window.getComputedStyle(subjectCell).backgroundColor;
+
+                const header = document.createElement('div');
+                header.className = 'task-header';
+                const label = document.createElement('span');
+                label.textContent = reminder.subject;
+                const actions = document.createElement('div');
+                actions.className = 'task-actions';
+
+                const completeButton = document.createElement('button');
+                completeButton.className = 'action-btn complete-btn';
+                completeButton.classList.toggle('is-completed', Boolean(reminder.completed));
+                completeButton.title = reminder.completed ? 'Reabrir recordatorio' : 'Marcar como completado';
+                completeButton.setAttribute('aria-label', completeButton.title);
+                completeButton.type = 'button';
+                completeButton.textContent = reminder.completed ? '↶' : '✓';
+                completeButton.addEventListener('click', () => toggleReminderCompleted(reminder.id, !reminder.completed));
+
+                const editButton = document.createElement('button');
+                editButton.className = 'action-btn';
+                editButton.title = 'Editar recordatorio';
+                editButton.type = 'button';
+                editButton.textContent = '✏️';
+                editButton.addEventListener('click', () => editReminder(reminder.id));
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'action-btn';
+                deleteButton.title = 'Eliminar recordatorio';
+                deleteButton.type = 'button';
+                deleteButton.textContent = '🗑️';
+                deleteButton.addEventListener('click', () => deleteReminder(reminder.id));
+
+                const message = document.createElement('div');
+                message.className = 'task-text';
+                message.textContent = reminder.message;
+                actions.append(completeButton, editButton, deleteButton);
+                header.append(label, actions);
+                reminderDiv.append(header, message);
+                reminderListElement.appendChild(reminderDiv);
+            });
         }
 
         function updateTasksPanel() {

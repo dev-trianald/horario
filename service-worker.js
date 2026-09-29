@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mi-horario-v2';
+const CACHE_NAME = 'mi-horario-v3';
 const APP_SHELL = [
     './',
     './index.html',

@@ -4,6 +4,8 @@ Aplicación web estática para consultar el horario y guardar tareas y exámenes
 
 ## Configuración de Supabase
 
+Los recordatorios se guardan en la tabla `reminders`. Si ya configuraste la app, ejecuta [`supabase/migration-add-reminders.sql`](supabase/migration-add-reminders.sql) en el SQL Editor.
+
 1. Crea un proyecto en [Supabase](https://supabase.com/).
 2. En el **SQL Editor** del proyecto, ejecuta el contenido de [`supabase/schema.sql`](supabase/schema.sql). Esto crea la tabla `tasks` y sus políticas de seguridad por usuario (RLS).
    Si la tabla ya existía, ejecuta [`supabase/migration-add-week-start.sql`](supabase/migration-add-week-start.sql) y [`supabase/migration-add-completed.sql`](supabase/migration-add-completed.sql) para añadir las columnas nuevas sin borrar tus tareas.
@@ -26,6 +28,8 @@ Al pulsar una asignatura puedes añadir una tarea o examen. Los cambios se guard
 Al crear o editar un apunte puedes activar **Marcar como examen**. La etiqueta `EXAMEN` aparecerá por encima de la tarjeta y puedes guardarlo sin escribir detalles; en ese caso se guardará como `Examen`. También puedes guardarlo para la semana actual o elegir una fecha de otra semana.
 
 Marca una tarea con el botón de check para moverla al **Historial** del panel lateral. Desde el historial puedes reabrirla y devolverla a pendientes.
+
+El panel **Recordatorios** permite guardar contenido importante de una asignatura sin día ni fecha, como los temas que entran en un examen. También incluye historial, edición, completado y borrado.
 
 ## Sincronizar con Google Calendar
 
