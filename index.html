@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TaskDAM</title>
+    <title>TaskDAM - Horario, tareas y exámenes de 2º DAM</title>
+    <meta name="description" content="TaskDAM permite consultar el horario de 2º DAM y guardar tareas y exámenes, con sincronización opcional con Google Calendar.">
     <link rel="icon" type="image/svg+xml" href="./icons/horario.svg?v=1">
     <meta name="theme-color" content="#1e1e1e">
     <meta name="apple-mobile-web-app-title" content="TaskDAM">
@@ -31,8 +32,10 @@
 
         .legal-footer {
             display: flex;
+            flex-direction: column;
+            align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             width: min(100%, 1400px);
             margin-top: auto;
             padding-top: 18px;
@@ -53,6 +56,22 @@
         h1 {
             margin: 0 0 16px;
             text-shadow: 0 0 10px rgba(255,255,255,0.2);
+            color: #4da8da;
+        }
+
+        .app-description, .privacy-notice {
+            width: min(100%, 600px);
+            margin: 0 auto 16px;
+            color: #c4c4c4;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .privacy-notice {
+            font-size: 0.85rem;
+        }
+
+        .privacy-notice a {
             color: #4da8da;
         }
 
@@ -607,7 +626,8 @@
 </head>
 <body>
 
-    <h1>Horario 2º DAM</h1>
+    <h1>TaskDAM</h1>
+    <p class="app-description">Aplicación web para estudiantes de 2º DAM: consulta el horario semanal sin iniciar sesión y, tras iniciar sesión, guarda y organiza tareas y exámenes. Si conectas Google Calendar, TaskDAM sincroniza sus eventos.</p>
 
     <section class="auth-panel" aria-label="Cuenta de Supabase">
         <form id="auth-form">
@@ -641,7 +661,7 @@
         </form>
     </div>
 
-    <div id="app-content" class="main-container hidden">
+    <div id="app-content" class="main-container">
         <!-- Rejilla del Horario -->
         <div class="schedule-wrapper">
         <div class="schedule-grid">
@@ -708,7 +728,7 @@
         </div>
 
         <!-- Panel de Tareas -->
-        <div class="tasks-panel">
+        <div id="tasks-panel" class="tasks-panel hidden">
             <div class="tasks-panel-header">
                 <h2 id="tasks-panel-title">Tareas y Exámenes</h2>
                 <button id="history-button" class="history-button" type="button">Historial</button>
@@ -727,7 +747,7 @@
         const authStatus = document.getElementById('auth-status');
         const signedInElement = document.getElementById('signed-in');
         const googleCalendarButton = document.getElementById('google-calendar-button');
-        const appContent = document.getElementById('app-content');
+        const tasksPanel = document.getElementById('tasks-panel');
         const taskListElement = document.getElementById('task-list');
         const tasksPanelTitle = document.getElementById('tasks-panel-title');
         const historyButton = document.getElementById('history-button');
@@ -1029,7 +1049,7 @@
             authPanel.classList.toggle('is-authenticated', isSignedIn);
             authForm.classList.toggle('hidden', isSignedIn);
             signedInElement.classList.toggle('hidden', !isSignedIn);
-            appContent.classList.toggle('hidden', !isSignedIn);
+            tasksPanel.classList.toggle('hidden', !isSignedIn);
 
             if (!isSignedIn) {
                 googleAccessToken = null;
@@ -1112,6 +1132,10 @@
         document.querySelectorAll('.subject').forEach(cell => {
             cell.addEventListener('click', async function() {
                 if (!supabaseClient) return;
+                if (!signedInEmail) {
+                    setStatus('Inicia sesión para añadir tareas o exámenes.');
+                    return;
+                }
                 const day = this.getAttribute('data-day');
                 const subject = this.getAttribute('data-subject');
                 const taskResult = await openTaskDialog({
@@ -1301,8 +1325,7 @@
         }
     </script>
     <footer class="legal-footer" aria-label="Información legal">
-        <a href="./pages/privacidad.html">Privacidad</a>
-        <span aria-hidden="true">·</span>
+        <p class="privacy-notice">Al conectar Google Calendar, TaskDAM verifica tu correo y gestiona los eventos de tus tareas. <a href="./pages/privacidad.html">Política de privacidad</a>.</p>
         <a href="./pages/terminos.html">Condiciones del servicio</a>
     </footer>
 </body>

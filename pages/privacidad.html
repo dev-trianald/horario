@@ -19,29 +19,41 @@
         
         <main class="bg-white p-8 md:p-10 rounded-2xl shadow-sm border border-slate-100">
             <section class="mb-8">
-                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">1. Naturaleza del Proyecto</h2>
-                <p class="leading-relaxed text-slate-600"><strong>TaskDAM</strong> es un proyecto académico desarrollado para el ciclo superior de 2º de Desarrollo de Aplicaciones Multiplataforma (DAM). No es una aplicación comercial ni tiene fines lucrativos.</p>
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">1. Sobre TaskDAM</h2>
+                <p class="leading-relaxed text-slate-600"><strong>TaskDAM</strong> es una aplicación académica para consultar el horario de 2º DAM y organizar tareas y exámenes. La conexión con Google Calendar es opcional y solo se inicia cuando el usuario la solicita.</p>
             </section>
-            
+
             <section class="mb-8">
-                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">2. Uso de Datos y Google Calendar</h2>
-                <p class="leading-relaxed text-slate-600">Al iniciar sesión, la aplicación solicita acceso a tu cuenta de Google Calendar única y exclusivamente para añadir, leer y gestionar tus tareas escolares dentro de la plataforma. No realizamos ninguna otra acción en tu cuenta de Google.</p>
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">2. Datos tratados</h2>
+                <p class="leading-relaxed text-slate-600">La cuenta de TaskDAM utiliza tu correo electrónico y contraseña mediante Supabase Auth. Las tareas que guardas incluyen asignatura, día, fecha de semana, descripción, color y estado. Supabase almacena estos datos para prestar el servicio; las políticas de seguridad limitan cada cuenta a sus propias tareas.</p>
             </section>
-            
+
             <section class="mb-8">
-                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">3. Privacidad y Almacenamiento</h2>
-                <p class="leading-relaxed text-slate-600">No recopilamos, vendemos ni almacenamos datos personales con fines comerciales. La autenticación de usuarios se gestiona de forma segura mediante Supabase. Las credenciales no pasan por servidores propios no autorizados.</p>
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">3. Uso de datos de Google</h2>
+                <p class="leading-relaxed text-slate-600">Si eliges conectar Google Calendar, Google solicita los permisos <code>calendar.events</code> y <code>userinfo.email</code>. TaskDAM consulta el correo de Google únicamente para comprobar que coincide con el correo de tu cuenta de TaskDAM. El token de acceso se mantiene en la memoria de la página durante la sesión y no se guarda en Supabase.</p>
+                <p class="leading-relaxed text-slate-600 mt-3">Al guardar, editar o borrar una tarea con Calendar conectado, TaskDAM crea, actualiza o elimina el evento correspondiente en tu calendario principal. El evento contiene el tipo de apunte, la asignatura, su descripción y la fecha. TaskDAM no lee ni importa tu calendario completo. Si desconectas Google, los eventos ya creados permanecen en Calendar; puedes borrarlos allí. La conexión se puede revocar desde el botón de Google Calendar.</p>
             </section>
-            
+
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">4. Servicios y conservación</h2>
+                <p class="leading-relaxed text-slate-600">Supabase presta la autenticación y el almacenamiento de tareas. Google recibe los datos necesarios para gestionar los eventos solo si conectas Calendar. TaskDAM no vende datos ni los utiliza para publicidad. Las tareas se conservan hasta que las borres o se elimine la cuenta; al eliminarse una cuenta de Supabase, sus tareas asociadas se eliminan también. La eliminación de una tarea desde TaskDAM borra el evento de Google cuando hay una conexión activa; de lo contrario, el evento debe borrarse en Google Calendar.</p>
+            </section>
+
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">5. Tus opciones y solicitudes</h2>
+                <p class="leading-relaxed text-slate-600">Puedes editar o borrar tus tareas desde la aplicación, desconectar Google Calendar y revocar el permiso concedido. La aplicación no incluye actualmente una opción para eliminar la cuenta. Para solicitar la eliminación de la cuenta y sus tareas, utiliza el correo de asistencia publicado en la pantalla de consentimiento OAuth de TaskDAM. No envíes contraseñas ni datos de tus tareas por canales públicos.</p>
+            </section>
+
             <section>
-                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">4. Permisos de Terceros</h2>
-                <p class="leading-relaxed text-slate-600">Los tokens y permisos otorgados por Google se utilizan solo durante la sesión para la sincronización de las tareas (en memoria) y no se comparten jamás con terceros.</p>
+                <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">6. Política de Google</h2>
+                <p class="leading-relaxed text-slate-600">El uso de información recibida de las API de Google cumple la <a class="text-indigo-600 underline" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Política de datos de usuario de los servicios API de Google</a>, incluidos sus requisitos de uso limitado.</p>
             </section>
         </main>
     </div>
     
     <footer class="py-6 text-center text-sm text-slate-400 bg-white border-t border-slate-200 mt-auto">
-        &copy; 2026 TaskDAM - Proyecto de 2º DAM. Creado con fines educativos.
+        <a class="text-indigo-600 underline" href="../index.html">Volver a TaskDAM</a>
+        <p class="mt-2">&copy; 2026 TaskDAM - Proyecto de 2º DAM. Creado con fines educativos.</p>
     </footer>
 </body>
 </html>

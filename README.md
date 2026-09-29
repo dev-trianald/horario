@@ -29,7 +29,7 @@ Marca una tarea con el botón de check para moverla al **Historial** del panel l
 
 ## Sincronizar con Google Calendar
 
-La sincronización necesita que cada usuario autorice Google Calendar con la misma dirección de correo usada para iniciar sesión en la app. Al conectar, la app solicita permiso para crear eventos y verifica que ambas cuentas coincidan. Las tareas y los exámenes se añaden como eventos de día completo en el día de la asignatura; no se envían a Google hasta que el usuario conecta su cuenta.
+La sincronización necesita que cada usuario autorice Google Calendar con la misma dirección de correo usada para iniciar sesión en la app. Al conectar, la app solicita los permisos `calendar.events` y `userinfo.email`; verifica que ambas cuentas coincidan y usa Calendar para crear, actualizar y borrar eventos de día completo. Los eventos contienen el tipo de apunte, la asignatura, su descripción y la fecha. No se envían a Google hasta que el usuario conecta su cuenta. La política de privacidad está en [`pages/privacidad.html`](pages/privacidad.html).
 
 1. En [Google Cloud Console](https://console.cloud.google.com/), crea o selecciona un proyecto y habilita **Google Calendar API**.
 2. Configura la pantalla de consentimiento OAuth. Si la app está en modo de pruebas, añade como usuario de prueba cada cuenta que vaya a conectar Calendar.
@@ -38,6 +38,20 @@ La sincronización necesita que cada usuario autorice Google Calendar con la mis
 5. Publica la app y pulsa **Conectar Google Calendar** después de iniciar sesión. Google mostrará el consentimiento. La dirección de Google debe coincidir con el correo de Supabase.
 
 La app conserva el permiso solo en memoria del navegador; puede ser necesario volver a conectar tras recargar o cerrar sesión. Al editar una tarea conectada se actualiza su evento; al eliminarla también se elimina de Google Calendar. Si Google no está conectado, la app guarda el cambio y avisa de que el calendario no se ha actualizado.
+
+### Publicar el acceso OAuth
+
+El código no puede cambiar el estado de publicación ni verificar el dominio por ti. Antes de poner el consentimiento OAuth a disposición de usuarios externos:
+
+1. Despliega la app con HTTPS. Para verificar GitHub Pages, abre [Google Search Console](https://search.google.com/search-console), añade como propiedad de prefijo de URL `https://dev-trianald.github.io/horario/` y elige el método de etiqueta HTML. Copia la etiqueta exacta que Google genere dentro del `<head>` de `index.html`, publica el cambio y completa la verificación. No uses una etiqueta inventada: el token es único de tu cuenta.
+2. En Google Auth Platform, completa **Branding** con el nombre exacto `TaskDAM`, un correo de asistencia real y las URL públicas de inicio, privacidad (`/pages/privacidad.html`) y condiciones (`/pages/terminos.html`). La portada identifica TaskDAM, describe su función y enlaza la política.
+3. Añade `dev-trianald.github.io` en **Authorized domains** y usa las URL HTTPS exactas de la portada y la política tanto en GitHub Pages como en la configuración OAuth. Tras verificar la propiedad, Google indica que puede tardar hasta 24 horas en actualizarse; vuelve a solicitar la revisión después.
+4. Si Search Console o Google Auth Platform no aceptan el subdominio compartido de GitHub Pages como dominio de tu propiedad, configura un dominio propio en GitHub Pages y verifica ese dominio mediante DNS. Un dominio propio es necesario en ese caso; no se puede resolver cambiando solo el HTML.
+5. En **Audience**, selecciona **External** y publica la app para salir del modo de prueba. Los usuarios de prueba dejan de ser la única audiencia, pero esto no sustituye una revisión de marca o permisos si Google la solicita.
+6. En **Data Access**, conserva los permisos que usa el código: `https://www.googleapis.com/auth/calendar.events` y `https://www.googleapis.com/auth/userinfo.email`. Si Google exige verificar el acceso a datos, completa la solicitud indicada en **Verification Center**; no basta con marcar la app como publicada.
+7. En el cliente OAuth de tipo **Web application**, añade el origen HTTPS exacto de la app en **Authorized JavaScript origins**. Actualiza también `googleClientId` en `config.js` si creas otro cliente.
+
+Google revisa por separado la marca y los permisos de datos. Mantén accesible la web y la política durante la revisión, y usa en la consola los mismos enlaces públicos que has desplegado.
 
 La autenticación usa correo y contraseña de Supabase. Si tienes activada la confirmación de correo, configura también la URL de tu web en **Authentication > URL Configuration**.
 
