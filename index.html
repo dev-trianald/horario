@@ -261,6 +261,10 @@
         }
 
         .action-btn {
+            display: grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
             background: none;
             border: none;
             cursor: pointer;
@@ -268,6 +272,21 @@
             padding: 0;
             opacity: 0.7;
             transition: opacity 0.2s;
+        }
+
+        .complete-btn {
+            border: 1px solid #69c98a;
+            border-radius: 50%;
+            background: rgba(39, 174, 96, 0.14);
+            color: #8ce0a7;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+
+        .complete-btn.is-completed {
+            background: #27ae60;
+            color: #fff;
+            opacity: 1;
         }
 
         .action-btn:hover {
@@ -1096,7 +1115,12 @@
                     }).select('id, day, subject, message, week_start, is_exam').single();
                     if (error) showTaskError(error);
                     else {
-                        await loadTasks().catch(showTaskError);
+                        try {
+                            await loadTasks();
+                        } catch (loadError) {
+                            showTaskError(loadError);
+                            return;
+                        }
                         if (googleAccessToken) {
                             try {
                                 await syncTaskToGoogleCalendar(data);
@@ -1138,10 +1162,20 @@
         }
 
         async function deleteTask(id) {
-            if(confirm("¿Seguro que quieres borrar esta tarea?")) {
-                const { error } = await supabaseClient.from('tasks').delete().eq('id', id);
-                if (error) showTaskError(error);
-                else await loadTasks().catch(showTaskError);
+            if (!confirm('¿Seguro que quieres borrar esta tarea?')) return;
+
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .delete()
+                .eq('id', id)
+                .select('id')
+                .maybeSingle();
+            if (error) {
+                showTaskError(error);
+            } else if (!data) {
+                setStatus('No se eliminó la tarea. Comprueba que la tabla tasks tenga una política DELETE para usuarios autenticados.', 6000);
+            } else {
+                await loadTasks().catch(showTaskError);
             }
         }
 
@@ -1191,7 +1225,8 @@
                 actions.className = 'task-actions';
 
                 const completeButton = document.createElement('button');
-                completeButton.className = 'action-btn';
+                completeButton.className = 'action-btn complete-btn';
+                completeButton.classList.toggle('is-completed', Boolean(task.completed));
                 completeButton.title = task.completed ? 'Reabrir tarea' : 'Marcar como completada';
                 completeButton.setAttribute('aria-label', completeButton.title);
                 completeButton.type = 'button';
