@@ -37,7 +37,7 @@ La sincronización necesita que cada usuario autorice Google Calendar con la mis
 4. Copia el ID de cliente (termina en `.apps.googleusercontent.com`) en `googleClientId` dentro de `config.js`. Este ID es público; no pegues secretos OAuth ni claves privadas en la web.
 5. Publica la app y pulsa **Conectar Google Calendar** después de iniciar sesión. Google mostrará el consentimiento. La dirección de Google debe coincidir con el correo de Supabase.
 
-La app conserva el permiso solo en memoria del navegador; puede ser necesario volver a conectar tras recargar o cerrar sesión. Si una tarea se guarda pero Google no está conectado, la app lo indicará y no la enviará a Google automáticamente hasta que se cree otra tarea.
+La app conserva el permiso solo en memoria del navegador; puede ser necesario volver a conectar tras recargar o cerrar sesión. Al editar una tarea conectada se actualiza su evento; al eliminarla también se elimina de Google Calendar. Si Google no está conectado, la app guarda el cambio y avisa de que el calendario no se ha actualizado.
 
 La autenticación usa correo y contraseña de Supabase. Si tienes activada la confirmación de correo, configura también la URL de tu web en **Authentication > URL Configuration**.
 
