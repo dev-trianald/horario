@@ -2,6 +2,23 @@
 
 Aplicación web estática para consultar el horario y guardar tareas y exámenes en Supabase. Cada persona inicia sesión con su cuenta y solo puede consultar y modificar sus propios apuntes.
 
+## Aplicación Flutter
+
+La app Flutter está en `lib/` y reutiliza las tablas `tasks` y `reminders` de Supabase. Incluye horario por día, acceso y registro por correo, tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado. Usa la misma configuración de Supabase y las políticas RLS ya descritas abajo.
+
+Requisitos: Flutter 3.27 o posterior y un dispositivo/emulador Android, iOS o navegador. Para generar los proyectos de plataforma sin reemplazar el `lib/` ni el `pubspec.yaml` de este repositorio, crea el esqueleto en una carpeta temporal y copia solo las plataformas:
+
+```sh
+flutter create --project-name taskdam --org es.taskdam --platforms=android,ios,web /tmp/taskdam-platforms
+cp -a /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-platforms/web .
+flutter pub get
+flutter run --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co --dart-define=SUPABASE_ANON_KEY=tu-clave-publica
+```
+
+En Linux, la compilación iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La clave anon es pública y las políticas RLS del esquema siguen siendo la protección de los datos. No incluyas claves `service_role`.
+
+La sincronización con Google Calendar de la versión web aún no está portada: para añadirla en Flutter hay que registrar y configurar clientes OAuth nativos de Android/iOS, además del ID web existente.
+
 ## Configuración de Supabase
 
 Los recordatorios se guardan en la tabla `reminders`. Si ya configuraste la app, ejecuta [`supabase/migration-add-reminders.sql`](supabase/migration-add-reminders.sql) en el SQL Editor.
