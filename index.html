@@ -1051,6 +1051,15 @@
             }
         }
 
+        function googleCalendarEventId(taskId) {
+            const legacyId = String(taskId).replaceAll('-', '').toLowerCase();
+            if (/^[a-v0-9]{5,1024}$/.test(legacyId)) return legacyId;
+
+            return Array.from(new TextEncoder().encode(String(taskId)), byte =>
+                byte.toString(16).padStart(2, '0')
+            ).join('');
+        }
+
         async function syncTaskToGoogleCalendar(task, method = 'POST') {
             const dayOffsets = { Lunes: 0, Martes: 1, Miércoles: 2, Jueves: 3, Viernes: 4 };
             if (!(task.day in dayOffsets)) throw new Error('No se reconoce el día de esta tarea.');
@@ -1060,7 +1069,7 @@
             const startDate = start.toISOString().slice(0, 10);
             const end = new Date(start);
             end.setUTCDate(end.getUTCDate() + 1);
-            const eventId = task.id.replaceAll('-', '').toLowerCase();
+            const eventId = googleCalendarEventId(task.id);
             const event = {
                 summary: `${task.is_exam ? 'Examen' : 'Tarea'} · ${task.subject}: ${task.message}`,
                 description: `Apunte de TaskDAM\nAsignatura: ${task.subject}\nDía: ${task.day}`,
@@ -1097,7 +1106,7 @@
         }
 
         async function deleteTaskFromGoogleCalendar(taskId) {
-            const eventId = taskId.replaceAll('-', '').toLowerCase();
+            const eventId = googleCalendarEventId(taskId);
             const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${googleAccessToken}` }
