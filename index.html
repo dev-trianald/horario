@@ -77,11 +77,17 @@
 
         .main-container {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(420px, 590px);
+            grid-template-columns: minmax(0, 950px);
             gap: 30px;
             justify-content: center;
-            max-width: 1400px;
+            max-width: 1400px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       ;
             width: 100%;
+        }
+
+        .main-container.is-authenticated {
+            grid-template-columns: minmax(0, 1fr) minmax(420px, 590px);
+            max-width: 1200px;
+            margin: auto;
         }
 
         .side-panels {
@@ -96,7 +102,7 @@
 
         .schedule-grid {
             display: grid;
-            grid-template-columns: 80px repeat(5, minmax(0, 1fr));
+            grid-template-columns: 110px repeat(5, minmax(0, 1fr));
             gap: 8px;
             width: 100%;
             background-color: #2d2d2d;
@@ -117,7 +123,7 @@
             justify-content: center;
             align-items: center;
             border-radius: 8px;
-            height: 75px;
+            height: 64px;
             text-align: center;
             position: relative;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -138,10 +144,6 @@
             font-weight: bold;
         }
 
-        .break-cell {
-            height: 45px !important;
-        }
-
         /* Colores oscurecidos para que resalte la letra blanca */
         .IP2 { background-color: #555555; color: white; }
         .PSP { background-color: #2980b9; color: white; } 
@@ -160,6 +162,8 @@
             cursor: not-allowed; 
             grid-column: span 5; 
             letter-spacing: 12px;
+            height: 90%;
+            margin: 2px;
         }
 
         .subject {
@@ -205,7 +209,7 @@
             box-shadow: 0 8px 16px rgba(0,0,0,0.5);
             min-width: 0;
             min-height: 0;
-            height: 100%;
+            height: 93%;
             display: flex;
             flex-direction: column;
         }
@@ -700,15 +704,16 @@
             }
 
             .schedule-grid {
+                grid-template-columns: 68px repeat(5, minmax(0, 1fr));
                 padding: 10px;
             }
 
             .header-cell, .time-cell, .subject {
-                height: 68px;
+                height: 58px;
             }
 
             .header-cell {
-                height: 46px;
+                height: 42px;
                 font-size: 0.9rem;
             }
 
@@ -1252,6 +1257,8 @@
             const isSignedIn = Boolean(session);
             signedInEmail = session?.user?.email || '';
             authPanel.classList.toggle('is-authenticated', isSignedIn);
+            document.getElementById('app-content').classList.toggle('is-authenticated', isSignedIn);
+            document.querySelector('.side-panels').classList.toggle('hidden', !isSignedIn);
             authForm.classList.toggle('hidden', isSignedIn);
             signedInElement.classList.toggle('hidden', !isSignedIn);
             tasksPanel.classList.toggle('hidden', !isSignedIn);
