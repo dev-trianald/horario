@@ -12,15 +12,15 @@ const classTimes = [
 ];
 
 const subjectColors = <String, Color>{
-  'IP2': Color(0xFF59666A),
-  'PSP': Color(0xFF247FA2),
-  'SGE': Color(0xFF33875E),
-  'PMDM': Color(0xFF9A5C3D),
-  'PI': Color(0xFF238A7B),
-  'DI': Color(0xFFC25F3B),
-  'ING': Color(0xFFA17B24),
-  'AD': Color(0xFF52667A),
-  'LD': Color(0xFF657B88),
+  'IP2': Color(0xFF555555),
+  'PSP': Color(0xFF2980B9),
+  'SGE': Color(0xFF27AE60),
+  'PMDM': Color(0xFF8E44AD),
+  'PI': Color(0xFF16A085),
+  'DI': Color(0xFFD35400),
+  'ING': Color(0xFFB7950B),
+  'AD': Color(0xFF2C3E50),
+  'LD': Color(0xFF3A536C),
 };
 
 const teachers = <String, String>{

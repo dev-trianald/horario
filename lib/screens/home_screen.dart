@@ -10,6 +10,8 @@ import '../models/task.dart';
 import '../services/task_service.dart';
 import 'edit_sheets.dart';
 
+const _desktopTimeColumnWidth = 104.0;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -341,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Row(
                   children: [
-                    const SizedBox(width: 74),
+                    const SizedBox(width: _desktopTimeColumnWidth),
                     for (final day in weekdays)
                       Expanded(
                         child: Padding(
@@ -374,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               : Row(
                                   children: [
                                     SizedBox(
-                                      width: 74,
+                                      width: _desktopTimeColumnWidth,
                                       child: Padding(
                                         padding: const EdgeInsets.all(3),
                                         child: Container(
@@ -607,7 +609,7 @@ class _DesktopPanel extends StatelessWidget {
       );
 }
 
-class _WeeklyClassCell extends StatelessWidget {
+class _WeeklyClassCell extends StatefulWidget {
   const _WeeklyClassCell({
     required this.subject,
     required this.teacher,
@@ -619,43 +621,78 @@ class _WeeklyClassCell extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(3),
-        child: Material(
-          color: subjectColors[subject],
-          borderRadius: BorderRadius.circular(6),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    subject,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    teacher,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(fontSize: 9),
-                  ),
-                ],
+  State<_WeeklyClassCell> createState() => _WeeklyClassCellState();
+}
+
+class _WeeklyClassCellState extends State<_WeeklyClassCell> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = subjectColors[widget.subject]!;
+    final radius = BorderRadius.circular(6);
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+            transform: Matrix4.diagonal3Values(
+              _hovered ? 1.04 : 1.0, _hovered ? 1.04 : 1.0, 1.0),
+          transformAlignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            boxShadow: _hovered
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Material(
+            color: color,
+            borderRadius: radius,
+            child: InkWell(
+              borderRadius: radius,
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.subject,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text(
+                      widget.teacher,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelSmall
+                          ?.copyWith(fontSize: 9),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _WeeklyBreakRow extends StatelessWidget {
@@ -665,7 +702,7 @@ class _WeeklyBreakRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         children: [
           const SizedBox(
-            width: 74,
+            width: _desktopTimeColumnWidth,
             child: Padding(
               padding: EdgeInsets.all(3),
               child: Text('11:15 - 11:45', textAlign: TextAlign.center),
