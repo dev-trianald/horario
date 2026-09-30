@@ -737,7 +737,7 @@
     <h1>TaskDAM</h1>
     <p class="app-description">Aplicación web para estudiantes de 2º DAM: consulta el horario semanal sin iniciar sesión y, tras iniciar sesión, organiza tareas, exámenes y recordatorios por asignatura.</p>
 
-    <section class="auth-panel" aria-label="Cuenta de Supabase">
+    <section class="auth-panel" aria-label="Cuenta de Firebase">
         <form id="auth-form">
             <input id="auth-email" type="email" autocomplete="email" placeholder="Correo electrónico" required>
             <input id="auth-password" type="password" autocomplete="current-password" placeholder="Contraseña" minlength="6" required>
@@ -885,7 +885,9 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore-compat.js"></script>
     <script src="./config.js"></script>
     <script>
         const authForm = document.getElementById('auth-form');
@@ -916,8 +918,9 @@
         const reminderDialogInput = document.getElementById('reminder-dialog-input');
         const reminderDialogSubject = document.getElementById('reminder-subject');
         const reminderDialogCancel = document.getElementById('reminder-dialog-cancel');
-        const supabaseConfig = window.SUPABASE_CONFIG;
-        let supabaseClient = null;
+        const appConfig = window.APP_CONFIG;
+        let firebaseAuth = null;
+        let firestore = null;
         let tasks = [];
         let reminders = [];
         let showingHistory = false;
@@ -928,6 +931,18 @@
         let googleIdentityServicesPromise = null;
 
         let statusTimeout;
+
+        function userCollection(name) {
+            const user = firebaseAuth?.currentUser;
+            if (!user) throw new Error('Inicia sesión para acceder a tus datos.');
+            return firestore.collection('users').doc(user.uid).collection(name);
+        }
+
+        function hasFirebaseConfig() {
+            const config = appConfig?.firebase;
+            return Boolean(config?.apiKey && config?.authDomain && config?.projectId &&
+                config?.appId && config?.messagingSenderId);
+        }
 
         function setStatus(message, duration = 2000) {
             window.clearTimeout(statusTimeout);
@@ -952,7 +967,7 @@
         }
 
         function loadGoogleIdentityServices() {
-            if (!window.SUPABASE_CONFIG?.googleClientId) {
+            if (!appConfig?.googleClientId) {
                 throw new Error('Añade el ID de cliente OAuth de Google en config.js para conectar Calendar.');
             }
             if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -979,7 +994,7 @@
             if (!window.google?.accounts?.oauth2) await loadGoogleIdentityServices();
             return new Promise((resolve, reject) => {
                 const tokenClient = window.google.accounts.oauth2.initTokenClient({
-                    client_id: window.SUPABASE_CONFIG.googleClientId,
+                    client_id: appConfig.googleClientId,
                     scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email',
                     callback: response => {
                         if (response.error) {
@@ -994,7 +1009,7 @@
             });
         }
 
-        if (window.SUPABASE_CONFIG?.googleClientId) {
+        if (appConfig?.googleClientId) {
             googleCalendarButton.disabled = true;
             loadGoogleIdentityServices()
                 .catch(() => {})
@@ -1095,27 +1110,11 @@
 
         function showTaskError(error) {
             console.error(error);
-            if (error.code === 'PGRST205') {
-                setStatus('Falta crear la tabla de tareas. Ejecuta supabase/schema.sql en el SQL Editor de Supabase.');
-                return;
-            }
-            if (error.message?.includes('completed')) {
-                setStatus('Falta actualizar la tabla. Ejecuta supabase/migration-add-completed.sql en Supabase.');
-                return;
-            }
-            if (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('tasks.week_start') || error.message?.includes("'is_exam' column")) {
-                setStatus('Falta actualizar la tabla. Ejecuta supabase/migration-add-week-start.sql en Supabase.');
-                return;
-            }
             setStatus(`No se pudo guardar el cambio: ${error.message || 'error de conexión'}`);
         }
 
         function showReminderError(error) {
             console.error(error);
-            if (error.code === 'PGRST205') {
-                setStatus('Falta crear la tabla de recordatorios. Ejecuta supabase/migration-add-reminders.sql en Supabase.');
-                return;
-            }
             setStatus(`No se pudo guardar el recordatorio: ${error.message || 'error de conexión'}`);
         }
 
@@ -1200,24 +1199,14 @@
         }
 
         async function loadTasks() {
-            const { data, error } = await supabaseClient
-                .from('tasks')
-                .select('id, day, subject, message, color, week_start, is_exam, completed')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            tasks = data;
+            const snapshot = await userCollection('tasks').orderBy('created_at', 'desc').get();
+            tasks = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
             updateTasksPanel();
         }
 
         async function loadReminders() {
-            const { data, error } = await supabaseClient
-                .from('reminders')
-                .select('id, subject, message, completed, created_at')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            reminders = data;
+            const snapshot = await userCollection('reminders').orderBy('created_at', 'desc').get();
+            reminders = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
             updateReminderHistoryButton();
             updateRemindersPanel();
         }
@@ -1255,7 +1244,7 @@
 
         async function applySession(session) {
             const isSignedIn = Boolean(session);
-            signedInEmail = session?.user?.email || '';
+            signedInEmail = session?.email || '';
             authPanel.classList.toggle('is-authenticated', isSignedIn);
             document.getElementById('app-content').classList.toggle('is-authenticated', isSignedIn);
             document.querySelector('.side-panels').classList.toggle('hidden', !isSignedIn);
@@ -1284,18 +1273,15 @@
             await loadReminders().catch(showReminderError);
         }
 
-        if (!window.supabase || !supabaseConfig?.url || !supabaseConfig?.anonKey) {
-            setStatus('Configura la URL y la clave pública de Supabase en config.js para empezar.');
+        if (!window.firebase || !hasFirebaseConfig()) {
+            setStatus('Configura Firebase en config.js para empezar.');
             authForm.querySelectorAll('button').forEach(button => button.disabled = true);
         } else {
-            supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
-            supabaseClient.auth.onAuthStateChange((_event, session) => {
-                setTimeout(() => applySession(session), 0);
-            });
-
-            supabaseClient.auth.getSession().then(({ data, error }) => {
-                if (error) showTaskError(error);
-                else applySession(data.session);
+            firebase.initializeApp(appConfig.firebase);
+            firebaseAuth = firebase.auth();
+            firestore = firebase.firestore();
+            firebaseAuth.onAuthStateChanged(user => {
+                applySession(user).catch(showTaskError);
             });
         }
 
@@ -1305,7 +1291,7 @@
 
         authForm.addEventListener('submit', async event => {
             event.preventDefault();
-            if (!supabaseClient) return;
+            if (!firebaseAuth) return;
 
             const submitButton = event.submitter;
             const email = document.getElementById('auth-email').value.trim();
@@ -1314,13 +1300,11 @@
             setStatus('Conectando…');
 
             try {
-                const result = submitButton.value === 'signup'
-                    ? await supabaseClient.auth.signUp({ email, password })
-                    : await supabaseClient.auth.signInWithPassword({ email, password });
-                if (result.error) throw result.error;
-                if (submitButton.value === 'signup' && !result.data.session) {
-                    setStatus('Cuenta creada. Revisa tu correo para confirmar la dirección antes de iniciar sesión.');
+                if (submitButton.value === 'signup') {
+                    await firebaseAuth.createUserWithEmailAndPassword(email, password);
+                    setStatus('Cuenta creada y sesión iniciada.');
                 } else {
+                    await firebaseAuth.signInWithEmailAndPassword(email, password);
                     setStatus('Sesión iniciada.');
                 }
             } catch (error) {
@@ -1331,8 +1315,11 @@
         });
 
         document.getElementById('signout-button').addEventListener('click', async () => {
-            const { error } = await supabaseClient.auth.signOut();
-            if (error) showTaskError(error);
+            try {
+                await firebaseAuth.signOut();
+            } catch (error) {
+                showTaskError(error);
+            }
         });
 
         googleCalendarButton.addEventListener('click', connectGoogleCalendar);
@@ -1347,9 +1334,16 @@
             const reminderResult = await openReminderDialog({ title: 'Añadir recordatorio' });
             if (!reminderResult) return;
 
-            const { error } = await supabaseClient.from('reminders').insert(reminderResult);
-            if (error) showReminderError(error);
-            else await loadReminders().catch(showReminderError);
+            try {
+                await userCollection('reminders').add({
+                    ...reminderResult,
+                    completed: false,
+                    created_at: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                await loadReminders();
+            } catch (error) {
+                showReminderError(error);
+            }
         });
 
         reminderHistoryButton.addEventListener('click', () => {
@@ -1360,8 +1354,7 @@
 
         document.querySelectorAll('.subject').forEach(cell => {
             cell.addEventListener('click', async function() {
-                if (!supabaseClient) return;
-                if (!signedInEmail) {
+                if (!firebaseAuth?.currentUser) {
                     setStatus('Inicia sesión para añadir tareas o exámenes.');
                     return;
                 }
@@ -1373,16 +1366,19 @@
                 });
 
                 if (taskResult) {
-                    const { data, error } = await supabaseClient.from('tasks').insert({
+                    const task = {
                         day: day,
                         subject: subject,
                         message: taskResult.message,
                         color: window.getComputedStyle(this).backgroundColor,
                         week_start: taskResult.weekStart,
-                        is_exam: taskResult.isExam
-                    }).select('id, day, subject, message, week_start, is_exam').single();
-                    if (error) showTaskError(error);
-                    else {
+                        is_exam: taskResult.isExam,
+                        completed: false,
+                        created_at: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    try {
+                        const document = await userCollection('tasks').add(task);
+                        const data = { ...task, id: document.id };
                         try {
                             await loadTasks();
                         } catch (loadError) {
@@ -1399,6 +1395,8 @@
                         } else {
                             setStatus('Tarea guardada. Conecta Google Calendar para sincronizarla automáticamente.', 5000);
                         }
+                    } catch (error) {
+                        showTaskError(error);
                     }
                 }
             });
@@ -1421,16 +1419,12 @@
                         week_start: taskResult.weekStart,
                         is_exam: taskResult.isExam
                     };
-                    const { error } = await supabaseClient
-                        .from('tasks')
-                        .update({
+                    try {
+                        await userCollection('tasks').doc(id).update({
                             message: taskResult.message,
                             week_start: taskResult.weekStart,
                             is_exam: taskResult.isExam
-                        })
-                        .eq('id', id);
-                    if (error) showTaskError(error);
-                    else {
+                        });
                         await loadTasks().catch(showTaskError);
                         if (googleAccessToken) {
                             try {
@@ -1442,6 +1436,8 @@
                         } else {
                             setStatus('Cambios guardados. Conecta Google Calendar para sincronizarlos.', 5000);
                         }
+                    } catch (error) {
+                        showTaskError(error);
                     }
                 }
             }
@@ -1450,17 +1446,8 @@
         async function deleteTask(id) {
             if (!confirm('¿Seguro que quieres borrar esta tarea?')) return;
 
-            const { data, error } = await supabaseClient
-                .from('tasks')
-                .delete()
-                .eq('id', id)
-                .select('id')
-                .maybeSingle();
-            if (error) {
-                showTaskError(error);
-            } else if (!data) {
-                setStatus('No se eliminó la tarea. Comprueba que la tabla tasks tenga una política DELETE para usuarios autenticados.', 6000);
-            } else {
+            try {
+                await userCollection('tasks').doc(id).delete();
                 await loadTasks().catch(showTaskError);
                 if (googleAccessToken) {
                     try {
@@ -1472,16 +1459,18 @@
                 } else {
                     setStatus('Tarea eliminada de la app. Conecta Google Calendar para eliminar también su evento.', 5000);
                 }
+            } catch (error) {
+                showTaskError(error);
             }
         }
 
         async function toggleTaskCompleted(id, completed) {
-            const { error } = await supabaseClient
-                .from('tasks')
-                .update({ completed })
-                .eq('id', id);
-            if (error) showTaskError(error);
-            else await loadTasks().catch(showTaskError);
+            try {
+                await userCollection('tasks').doc(id).update({ completed });
+                await loadTasks();
+            } catch (error) {
+                showTaskError(error);
+            }
         }
 
         async function editReminder(id) {
@@ -1494,28 +1483,31 @@
             });
             if (!result) return;
 
-            const { error } = await supabaseClient
-                .from('reminders')
-                .update(result)
-                .eq('id', id);
-            if (error) showReminderError(error);
-            else await loadReminders().catch(showReminderError);
+            try {
+                await userCollection('reminders').doc(id).update(result);
+                await loadReminders();
+            } catch (error) {
+                showReminderError(error);
+            }
         }
 
         async function deleteReminder(id) {
             if (!confirm('¿Seguro que quieres borrar este recordatorio?')) return;
-            const { error } = await supabaseClient.from('reminders').delete().eq('id', id);
-            if (error) showReminderError(error);
-            else await loadReminders().catch(showReminderError);
+            try {
+                await userCollection('reminders').doc(id).delete();
+                await loadReminders();
+            } catch (error) {
+                showReminderError(error);
+            }
         }
 
         async function toggleReminderCompleted(id, completed) {
-            const { error } = await supabaseClient
-                .from('reminders')
-                .update({ completed })
-                .eq('id', id);
-            if (error) showReminderError(error);
-            else await loadReminders().catch(showReminderError);
+            try {
+                await userCollection('reminders').doc(id).update({ completed });
+                await loadReminders();
+            } catch (error) {
+                showReminderError(error);
+            }
         }
 
         function updateHistoryButton() {

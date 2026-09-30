@@ -25,18 +25,18 @@
 
             <section class="mb-8">
                 <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">2. Datos tratados</h2>
-                <p class="leading-relaxed text-slate-600">La versión web utiliza Supabase Auth y almacena en Supabase las tareas que guardas, incluidos asignatura, día, semana, descripción, color y estado. La aplicación Flutter utiliza Firebase Authentication y Cloud Firestore para la cuenta, las tareas y los recordatorios. En ambos servicios, las reglas de seguridad limitan el acceso a los datos de la cuenta correspondiente.</p>
+                <p class="leading-relaxed text-slate-600">La versión web y la aplicación Flutter utilizan Firebase Authentication y Cloud Firestore para las cuentas, tareas y recordatorios. Los datos se guardan bajo el identificador de la cuenta y las reglas de seguridad de Firestore limitan el acceso a los documentos de cada usuario.</p>
             </section>
 
             <section class="mb-8">
                 <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">3. Uso de datos de Google</h2>
-                <p class="leading-relaxed text-slate-600">Si eliges conectar Google Calendar desde la versión web, Google solicita los permisos <code>calendar.events</code> y <code>userinfo.email</code>. TaskDAM consulta el correo de Google únicamente para comprobar que coincide con el correo de tu cuenta de TaskDAM. El token de acceso se mantiene en la memoria de la página durante la sesión y no se guarda en Supabase ni en Firebase.</p>
+                <p class="leading-relaxed text-slate-600">Si eliges conectar Google Calendar desde la versión web, Google solicita los permisos <code>calendar.events</code> y <code>userinfo.email</code>. TaskDAM consulta el correo de Google únicamente para comprobar que coincide con el correo de tu cuenta de TaskDAM. El token de acceso se mantiene en la memoria de la página durante la sesión y no se guarda en Firebase.</p>
                 <p class="leading-relaxed text-slate-600 mt-3">Al guardar, editar o borrar una tarea con Calendar conectado, TaskDAM crea, actualiza o elimina el evento correspondiente en tu calendario principal. El evento contiene el tipo de apunte, la asignatura, su descripción y la fecha. TaskDAM no lee ni importa tu calendario completo. Si desconectas Google, los eventos ya creados permanecen en Calendar; puedes borrarlos allí. La conexión se puede revocar desde el botón de Google Calendar.</p>
             </section>
 
             <section class="mb-8">
                 <h2 class="text-2xl font-semibold mb-3 text-slate-900 border-b pb-2">4. Servicios y conservación</h2>
-                <p class="leading-relaxed text-slate-600">Supabase presta la autenticación y el almacenamiento de la versión web; Firebase presta la autenticación y el almacenamiento de Flutter. Google recibe los datos necesarios para gestionar eventos solo si conectas Calendar desde la web. TaskDAM no vende datos ni los utiliza para publicidad. Los datos se conservan hasta que se borren desde el servicio correspondiente. Eliminar una cuenta de Firebase Authentication no elimina automáticamente sus documentos de Firestore; para solicitar la eliminación de los datos, utiliza el correo de asistencia publicado en la pantalla de consentimiento OAuth. La eliminación de una tarea desde la web borra el evento de Google cuando hay una conexión activa; de lo contrario, el evento debe borrarse en Google Calendar.</p>
+                <p class="leading-relaxed text-slate-600">Firebase presta la autenticación y el almacenamiento de ambas versiones. Google recibe los datos necesarios para gestionar eventos solo si conectas Calendar desde la web. TaskDAM no vende datos ni los utiliza para publicidad. Los datos se conservan hasta que se borren desde la aplicación o el servicio correspondiente. Eliminar una cuenta de Firebase Authentication no elimina automáticamente sus documentos de Firestore; para solicitar la eliminación de los datos, utiliza el correo de asistencia publicado en la pantalla de consentimiento OAuth. La eliminación de una tarea desde la web borra el evento de Google cuando hay una conexión activa; de lo contrario, el evento debe borrarse en Google Calendar.</p>
             </section>
 
             <section class="mb-8">

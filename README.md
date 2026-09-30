@@ -1,6 +1,6 @@
 # Horario 2º DAM
 
-La versión web estática usa Supabase. La aplicación Flutter usa Firebase Authentication y Cloud Firestore; cada usuario solo puede consultar y modificar sus propios apuntes. Son clientes separados y esta migración no copia automáticamente usuarios ni datos de Supabase a Firebase.
+La versión web estática y la aplicación Flutter usan Firebase Authentication y Cloud Firestore. Cada usuario solo puede consultar y modificar sus propios apuntes. La carpeta `supabase/` conserva el esquema SQL anterior únicamente como referencia: no lo ejecutes para configurar la versión Firebase.
 
 ## Aplicación Flutter
 
@@ -52,28 +52,28 @@ No pongas credenciales de cuentas de servicio en la app. La seguridad depende de
 
 En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La sincronización con Google Calendar de la versión web aún no está portada a Flutter.
 
-## Configuración de Supabase (versión web)
+## Configuración de Firebase para la web
 
-Los recordatorios se guardan en la tabla `reminders`. Si ya configuraste la app, ejecuta [`supabase/migration-add-reminders.sql`](supabase/migration-add-reminders.sql) en el SQL Editor.
+La web guarda los datos en `users/{uid}/tasks/{taskId}` y `users/{uid}/reminders/{reminderId}`. El UID de Firebase Auth determina el propietario; no se guarda un `userId` adicional en cada documento. El esquema GraphQL con `@table` corresponde a Firebase Data Connect/Cloud SQL y no se usa en esta app, que utiliza Cloud Firestore.
 
-1. Crea un proyecto en [Supabase](https://supabase.com/).
-2. En el **SQL Editor** del proyecto, ejecuta el contenido de [`supabase/schema.sql`](supabase/schema.sql). Esto crea la tabla `tasks` y sus políticas de seguridad por usuario (RLS).
-   Si la tabla ya existía, ejecuta [`supabase/migration-add-week-start.sql`](supabase/migration-add-week-start.sql) y [`supabase/migration-add-completed.sql`](supabase/migration-add-completed.sql) para añadir las columnas nuevas sin borrar tus tareas.
-3. En **Project Settings > API**, copia la **Project URL** y la clave pública **anon / publishable**.
-4. Pega esos valores en `config.js`:
+1. En el mismo proyecto de Firebase, registra una aplicación **Web** y habilita **Authentication > Sign-in method > Email/Password**.
+2. Crea la base de datos en **Firestore Database** y publica las reglas del repositorio:
 
-   ```js
-   window.SUPABASE_CONFIG = {
-	   url: "https://tu-proyecto.supabase.co",
-	   anonKey: "tu-clave-publica"
-   };
+   ```sh
+   firebase deploy --only firestore:rules --project TU_PROJECT_ID
    ```
 
-   La clave pública está pensada para estar en el navegador. No pongas aquí una `service_role` ni ninguna clave secreta; la protección de los datos depende de las políticas RLS del esquema.
+3. Copia la configuración de la aplicación web que muestra Firebase y rellena `firebase` en `config.js` (`apiKey`, `authDomain`, `projectId`, `appId` y `messagingSenderId`). Son valores de configuración pública; no pongas claves de cuentas de servicio ni secretos en el navegador.
+4. Para usar la versión Flutter, ejecuta también `flutterfire configure --project TU_PROJECT_ID --platforms web,android,ios`; esto genera `lib/firebase_options.dart`. El archivo actual es una plantilla sin configuración.
+5. Sirve la carpeta con un servidor web estático o publícala en un hosting estático. No abras `index.html` directamente como archivo local.
 
-5. Sirve la carpeta con un servidor web estático o publícala en un hosting estático. Abre la URL publicada, crea una cuenta y confirma el correo si Supabase lo solicita. No abras `index.html` directamente como archivo local.
+Para publicar en GitHub Pages en `https://dev-trianald.github.io/horario/`, añade `dev-trianald.github.io` a **Firebase Authentication > Settings > Authorized domains**. Si restringes la API key por sitios web, permite `https://dev-trianald.github.io/*` y el origen local de desarrollo. En el cliente OAuth de Google, el origen autorizado es `https://dev-trianald.github.io` (sin `/horario/`); el origen local `http://localhost:8000` se añade por separado.
 
-Al pulsar una asignatura puedes añadir una tarea o examen. Los cambios se guardan en Supabase y se vuelven a cargar al iniciar sesión. La edición y el borrado también se sincronizan con la base de datos.
+Firebase Auth crea una sesión al registrar una cuenta y permite recuperar el acceso mediante los flujos de Firebase. Para iniciar sesión con Google u otro proveedor habrá que habilitarlo en Firebase Authentication y añadir el botón y el flujo correspondiente. El OAuth de Google Calendar es independiente y se configura con `googleClientId` en `config.js`.
+
+La configuración cliente de Firebase no protege por sí sola los datos: las reglas de `firestore.rules` limitan cada operación a `users/{uid}`. Los usuarios y datos que sigan en Supabase no se trasladan automáticamente; hay que migrarlos por separado. Las cuentas necesitan volver a registrarse o seguir un proceso de migración de usuarios; no copies contraseñas ni credenciales de administración al cliente.
+
+Al pulsar una asignatura puedes añadir una tarea o examen. Los cambios se guardan en Firestore y se vuelven a cargar al iniciar sesión. La edición y el borrado también se sincronizan con la base de datos.
 
 Al crear o editar un apunte puedes activar **Marcar como examen**. La etiqueta `EXAMEN` aparecerá por encima de la tarjeta y puedes guardarlo sin escribir detalles; en ese caso se guardará como `Examen`. También puedes guardarlo para la semana actual o elegir una fecha de otra semana.
 
@@ -87,9 +87,9 @@ La sincronización necesita que cada usuario autorice Google Calendar con la mis
 
 1. En [Google Cloud Console](https://console.cloud.google.com/), crea o selecciona un proyecto y habilita **Google Calendar API**.
 2. Configura la pantalla de consentimiento OAuth. Si la app está en modo de pruebas, añade como usuario de prueba cada cuenta que vaya a conectar Calendar.
-3. Crea un **OAuth Client ID** de tipo **Web application**. Añade el dominio publicado de la app en **Authorized JavaScript origins**. Para desarrollo local, añade también el origen local que uses, por ejemplo `http://localhost:8000`.
+3. Crea un **OAuth Client ID** de tipo **Web application**. Añade `https://dev-trianald.github.io` en **Authorized JavaScript origins** (sin la ruta `/horario/`). Para desarrollo local, añade también `http://localhost:8000`.
 4. Copia el ID de cliente (termina en `.apps.googleusercontent.com`) en `googleClientId` dentro de `config.js`. Este ID es público; no pegues secretos OAuth ni claves privadas en la web.
-5. Publica la app y pulsa **Conectar Google Calendar** después de iniciar sesión. Google mostrará el consentimiento. La dirección de Google debe coincidir con el correo de Supabase.
+5. Publica la app y pulsa **Conectar Google Calendar** después de iniciar sesión. Google mostrará el consentimiento. La dirección de Google debe coincidir con el correo de Firebase Auth.
 
 La app conserva el permiso solo en memoria del navegador; puede ser necesario volver a conectar tras recargar o cerrar sesión. Al editar una tarea conectada se actualiza su evento; al eliminarla también se elimina de Google Calendar. Si Google no está conectado, la app guarda el cambio y avisa de que el calendario no se ha actualizado.
 
@@ -107,7 +107,7 @@ El código no puede cambiar el estado de publicación ni verificar el dominio po
 
 Google revisa por separado la marca y los permisos de datos. Mantén accesible la web y la política durante la revisión, y usa en la consola los mismos enlaces públicos que has desplegado.
 
-La autenticación usa correo y contraseña de Supabase. Si tienes activada la confirmación de correo, configura también la URL de tu web en **Authentication > URL Configuration**.
+La autenticación usa correo y contraseña de Firebase Authentication. Añade el dominio publicado de la web en **Authentication > Settings > Authorized domains**.
 
 ## Instalarla en el móvil
 
@@ -116,7 +116,7 @@ Publica la carpeta en un hosting con HTTPS, por ejemplo Netlify o GitHub Pages. 
 - En Android con Chrome, abre la URL publicada y elige **Instalar aplicación** o **Añadir a pantalla de inicio**.
 - En iPhone con Safari, pulsa **Compartir**, después **Añadir a pantalla de inicio** y confirma.
 
-La aplicación instalada usa la misma URL, cuenta y base de datos de Supabase que la versión del ordenador. Necesita conexión a Internet para iniciar sesión y sincronizar tareas.
+La aplicación instalada usa la misma URL, cuenta y base de datos de Firebase que la versión del ordenador. Necesita conexión a Internet para iniciar sesión y sincronizar tareas.
 
 ## Obtener un APK para Android
 
@@ -126,6 +126,6 @@ GitHub Pages no genera archivos APK: publica la PWA. Para crear el APK a partir 
 2. Abre la URL HTTPS que GitHub Pages te proporcione y comprueba que la aplicación funciona.
 3. Entra en [PWABuilder](https://www.pwabuilder.com/), pega esa URL y pulsa **Start**.
 4. Cuando termine el análisis, elige **Package for stores > Android** y descarga el paquete generado.
-5. En Supabase añade la URL de GitHub Pages en **Authentication > URL Configuration** como **Site URL** y como URL de redirección si aparece esa opción.
+5. En Firebase Authentication comprueba que el dominio de GitHub Pages esté incluido en **Authorized domains**.
 
-El APK será una versión instalable de esta misma aplicación: usará la misma URL, el mismo `config.js` y la misma base de datos de Supabase. Para cambios posteriores, publica primero los cambios en GitHub Pages y vuelve a generar el paquete si quieres actualizar el APK.
+El APK será una versión instalable de esta misma aplicación: usará la misma URL, el mismo `config.js` y la misma base de datos de Firebase. Para cambios posteriores, publica primero los cambios en GitHub Pages y vuelve a generar el paquete si quieres actualizar el paquete.
