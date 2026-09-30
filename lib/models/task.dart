@@ -8,6 +8,7 @@ class TaskItem {
     required this.weekStart,
     required this.isExam,
     required this.completed,
+    this.scheduleId,
   });
 
   final String id;
@@ -18,6 +19,7 @@ class TaskItem {
   final DateTime weekStart;
   final bool isExam;
   final bool completed;
+  final String? scheduleId;
 
   factory TaskItem.fromMap(Map<String, dynamic> map) => TaskItem(
         id: map['id'] as String,
@@ -28,6 +30,7 @@ class TaskItem {
         weekStart: DateTime.parse(map['week_start'] as String),
         isExam: map['is_exam'] as bool? ?? false,
         completed: map['completed'] as bool? ?? false,
+        scheduleId: map['schedule_id'] as String?,
       );
 }
 

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/schedule.dart';
+import '../models/schedule_class.dart';
 import '../models/task.dart';
 
 class TaskService {
@@ -14,6 +15,88 @@ class TaskService {
     final user = _auth.currentUser;
     if (user == null) throw StateError('Inicia sesión para acceder a tus datos.');
     return _firestore.collection('users').doc(user.uid).collection(name);
+  }
+
+  Future<List<ScheduleClass>> loadClasses() async {
+    final snapshot = await _userCollection('classes')
+        .orderBy('created_at', descending: true)
+        .get();
+    return snapshot.docs
+        .map((document) => ScheduleClass.fromMap({
+              ...document.data(),
+              'id': document.id,
+            }))
+        .toList();
+  }
+
+  Future<String> createClass(String name) async {
+    final document = await _userCollection('classes').add({
+      'name': name,
+      'has_schedule': false,
+      'subjects': <Map<String, dynamic>>[],
+      'cells': <String, String>{},
+      'created_at': FieldValue.serverTimestamp(),
+    });
+    return document.id;
+  }
+
+  Future<void> renameClass(String classId, String name) async {
+    await _userCollection('classes').doc(classId).update({'name': name});
+  }
+
+  Future<void> createSchedule(String classId) async {
+    await _userCollection('classes').doc(classId).update({
+      'has_schedule': true,
+    });
+  }
+
+  Future<String> saveSubject({
+    required String classId,
+    required String name,
+    required String teacher,
+    required String color,
+  }) async {
+    final subjectId = _userCollection('classes').doc(classId).collection(
+      'subjectIds',
+    ).doc().id;
+    await _userCollection('classes').doc(classId).update({
+      'subjects': FieldValue.arrayUnion([
+        {
+          'id': subjectId,
+          'name': name,
+          'teacher': teacher,
+          'color': color,
+        }
+      ]),
+    });
+    return subjectId;
+  }
+
+  Future<void> setScheduleCell({
+    required String classId,
+    required String day,
+    required int period,
+    required String? subjectId,
+  }) async {
+    await _userCollection('classes').doc(classId).update({
+      'cells.${day}_$period': subjectId ?? FieldValue.delete(),
+    });
+  }
+
+  Future<void> moveScheduleCell({
+    required String classId,
+    required String fromDay,
+    required int fromPeriod,
+    required String toDay,
+    required int toPeriod,
+    required String subjectId,
+    required String? destinationSubjectId,
+  }) async {
+    await _userCollection('classes').doc(classId).update({
+      'cells.${fromDay}_$fromPeriod':
+          destinationSubjectId ?? FieldValue.delete(),
+      'cells.${toDay}_$toPeriod': subjectId,
+    });
   }
 
   Future<List<TaskItem>> loadTasks() async {
@@ -48,6 +131,7 @@ class TaskService {
     required String color,
     required DateTime weekStart,
     required bool isExam,
+    String? scheduleId,
   }) async {
     final collection = _userCollection('tasks');
     final values = <String, dynamic>{
@@ -58,6 +142,7 @@ class TaskService {
       'week_start': dateKey(weekStart),
       'is_exam': isExam,
     };
+    if (scheduleId != null) values['schedule_id'] = scheduleId;
     if (id == null) {
       values['completed'] = false;
       values['created_at'] = FieldValue.serverTimestamp();

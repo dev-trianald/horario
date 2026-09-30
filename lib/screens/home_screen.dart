@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../data/schedule.dart';
+import '../models/schedule_class.dart';
 import '../models/task.dart';
 import '../services/task_service.dart';
 import 'edit_sheets.dart';
@@ -30,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TaskService _service = TaskService(widget.firestore, widget.auth);
   late User? _user = widget.auth.currentUser;
   StreamSubscription<User?>? _authSubscription;
+  List<ScheduleClass> _classes = [];
   List<TaskItem> _tasks = [];
   List<ReminderItem> _reminders = [];
   bool _loadingData = false;
@@ -37,6 +39,17 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showReminderHistory = false;
   int _tab = 0;
   int _selectedDay = (DateTime.now().weekday - 1).clamp(0, 4).toInt();
+  String? _selectedClassId;
+  bool _editingSchedule = false;
+
+  ScheduleClass? get _selectedClass {
+    final id = _selectedClassId;
+    if (id == null) return null;
+    for (final classItem in _classes) {
+      if (classItem.id == id) return classItem;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -46,6 +59,8 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _user = user);
       if (_user == null) {
         setState(() {
+          _classes = [];
+          _selectedClassId = null;
           _tasks = [];
           _reminders = [];
         });
@@ -67,13 +82,19 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loadingData = true);
     try {
       final results = await Future.wait([
+        _service.loadClasses(),
         _service.loadTasks(),
         _service.loadReminders(),
       ]);
       if (!mounted) return;
       setState(() {
-        _tasks = results[0] as List<TaskItem>;
-        _reminders = results[1] as List<ReminderItem>;
+        _classes = results[0] as List<ScheduleClass>;
+        _tasks = results[1] as List<TaskItem>;
+        _reminders = results[2] as List<ReminderItem>;
+        if (_selectedClassId != null &&
+            !_classes.any((item) => item.id == _selectedClassId)) {
+          _selectedClassId = null;
+        }
       });
     } catch (error) {
       _showMessage('No se pudieron cargar tus datos: $error');
@@ -90,6 +111,79 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (error) {
       _showMessage('No se pudo guardar el cambio: $error');
     }
+  }
+
+  Future<bool> _ensureSignedIn(String message) async {
+    if (_user != null) return true;
+    _showMessage(message);
+    await _showAccount();
+    return _user != null;
+  }
+
+  Future<void> _createClass() async {
+    if (!await _ensureSignedIn('Inicia sesión para crear tus clases.')) return;
+    if (!mounted) return;
+    final draft = await showModalBottomSheet<ClassDraft>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => const ClassEditorSheet(),
+    );
+    if (!mounted || draft == null) return;
+    try {
+      final id = await _service.createClass(draft.name);
+      if (!mounted) return;
+      setState(() {
+        _selectedClassId = id;
+        _tab = 0;
+      });
+      await _loadData();
+    } catch (error) {
+      _showMessage('No se pudo crear la clase: $error');
+    }
+  }
+
+  Future<void> _editClassName() async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    if (!await _ensureSignedIn('Inicia sesión para editar la clase.')) return;
+    if (!mounted) return;
+    final draft = await showModalBottomSheet<ClassDraft>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => ClassEditorSheet(initialName: classItem.name),
+    );
+    if (!mounted || draft == null) return;
+    await _perform(() => _service.renameClass(classItem.id, draft.name));
+  }
+
+  Future<void> _createSchedule() async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    if (!await _ensureSignedIn('Inicia sesión para crear el horario.')) return;
+    await _perform(() => _service.createSchedule(classItem.id));
+  }
+
+  Future<void> _createSubject() async {
+    final classItem = _selectedClass;
+    if (classItem == null || classItem.isComplete) return;
+    if (!await _ensureSignedIn('Inicia sesión para crear asignaturas.')) return;
+    if (!mounted) return;
+    final draft = await showModalBottomSheet<SubjectDraft>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => const SubjectEditorSheet(),
+    );
+    if (!mounted || draft == null) return;
+    final color = _colorHex(draft.color);
+    await _perform(() => _service.saveSubject(
+          classId: classItem.id,
+          name: draft.name,
+          teacher: draft.teacher,
+          color: color,
+        ));
   }
 
   void _showMessage(String message) {
@@ -143,6 +237,11 @@ class _HomeScreenState extends State<HomeScreen> {
       await _showAccount();
       return;
     }
+    final classItem = _selectedClass;
+    if (classItem == null || classItem.subjects.isEmpty) {
+      _showMessage('Crea al menos una asignatura antes de añadir tareas.');
+      return;
+    }
     final draft = await showModalBottomSheet<TaskDraft>(
       context: context,
       isScrollControlled: true,
@@ -150,19 +249,23 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => TaskEditorSheet(
         day: day,
         subject: subject,
+        availableSubjects: classItem.subjects,
         task: task,
       ),
     );
-    if (draft == null) return;
+    if (!mounted || draft == null) return;
+    final selectedSubject = classItem.subjects
+        .where((item) => item.name == draft.subject)
+        .firstOrNull;
     await _perform(() => _service.saveTask(
           id: task?.id,
           day: draft.day,
           subject: draft.subject,
           message: draft.message,
-          color:
-              '#${subjectColors[draft.subject]!.toARGB32().toRadixString(16).substring(2)}',
+          color: selectedSubject?.color ?? '#2787A0',
           weekStart: draft.weekStart,
           isExam: draft.isExam,
+          scheduleId: classItem.id,
         ));
   }
 
@@ -176,9 +279,15 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => ReminderEditorSheet(reminder: reminder),
+      builder: (context) => ReminderEditorSheet(
+        reminder: reminder,
+        availableSubjects: _selectedClass?.subjects
+                .map((subject) => subject.name)
+                .toList() ??
+            const [],
+      ),
     );
-    if (draft == null) return;
+    if (!mounted || draft == null) return;
     await _perform(() => _service.saveReminder(
           id: reminder?.id,
           subject: draft.subject,
@@ -220,23 +329,63 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final titles = ['Horario', 'Tareas y exámenes', 'Recordatorios'];
     final isDesktop = MediaQuery.sizeOf(context).width >= 1100;
+    final activeClass = _selectedClass;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        leading: activeClass == null
+            ? null
+            : IconButton(
+                tooltip: 'Volver a mis clases',
+                onPressed: () => setState(() {
+                  _selectedClassId = null;
+                  _editingSchedule = false;
+                  _tab = 0;
+                }),
+                icon: const Icon(Icons.arrow_back),
+              ),
+        title: Row(
           children: [
-            Text('TaskDAM', style: Theme.of(context).textTheme.titleLarge),
-            Text(
-              isDesktop
-                  ? 'Horario semanal · Tareas · Recordatorios'
-                  : titles[_tab],
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            const _TaskDamLogo(size: 38),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activeClass?.name ?? 'TaskDAM',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
+                  Text(
+                    activeClass == null
+                        ? 'Mis clases'
+                        : !activeClass.hasSchedule
+                            ? 'Configura tu horario'
+                            : isDesktop
+                                ? 'Horario · Tareas · Recordatorios'
+                                : titles[_tab],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
+          if (activeClass != null)
+            IconButton(
+              tooltip: 'Editar nombre de la clase',
+              onPressed: _editClassName,
+              icon: const Icon(Icons.edit_outlined),
+            ),
           if (_loadingData)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
@@ -256,33 +405,44 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: isDesktop
-          ? _buildDesktopDashboard()
-          : IndexedStack(
-              index: _tab,
-              children: [
-                _buildSchedule(),
-                _buildTasks(),
-                _buildReminders(),
-              ],
-            ),
-      floatingActionButton: !isDesktop && _tab == 1 && _user != null
+      body: activeClass == null
+          ? _buildClassHome()
+          : isDesktop
+              ? _buildDesktopDashboard()
+              : IndexedStack(
+                  index: _tab,
+                  children: [
+                    _buildSchedule(),
+                    _buildTasks(),
+                    _buildReminders(),
+                  ],
+                ),
+      floatingActionButton: activeClass != null &&
+              activeClass.hasSchedule &&
+              activeClass.subjects.isNotEmpty &&
+              !isDesktop &&
+              _tab == 1 &&
+              _user != null
           ? FloatingActionButton.extended(
               onPressed: () => _editTask(
                 day: weekdays[_selectedDay],
-                subject: scheduleByDay[weekdays[_selectedDay]]!.first,
+                subject: activeClass.subjects.first.name,
               ),
               icon: const Icon(Icons.add),
               label: const Text('Añadir tarea'),
             )
-          : !isDesktop && _tab == 2 && _user != null
+          : activeClass != null &&
+                  activeClass.hasSchedule &&
+                  !isDesktop &&
+                  _tab == 2 &&
+                  _user != null
               ? FloatingActionButton.extended(
                   onPressed: () => _editReminder(),
                   icon: const Icon(Icons.add),
                   label: const Text('Añadir recordatorio'),
                 )
               : null,
-      bottomNavigationBar: isDesktop
+        bottomNavigationBar: activeClass == null || isDesktop
           ? null
           : NavigationBar(
               selectedIndex: _tab,
@@ -298,6 +458,93 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
     );
   }
+
+  Widget _buildClassHome() => Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 32),
+            children: [
+              Text('Mis clases',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      )),
+              const SizedBox(height: 6),
+              Text(
+                'Crea una clase y configura su horario, asignaturas y apuntes.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: _createClass,
+                  icon: const Icon(Icons.add),
+                  label: Text(MediaQuery.sizeOf(context).width < 600
+                      ? 'Añadir horario'
+                      : 'Crear clase'),
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_classes.isEmpty)
+                _EmptyState(
+                  icon: Icons.class_outlined,
+                  message: _user == null
+                      ? 'Inicia sesión para crear y guardar tus clases.'
+                      : 'Aún no has creado ninguna clase.',
+                )
+              else
+                for (final classItem in _classes) ...[
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      onTap: () => setState(() {
+                        _selectedClassId = classItem.id;
+                        _editingSchedule = false;
+                        _tab = 0;
+                      }),
+                      leading: const _TaskDamLogo(size: 42),
+                      title: Text(classItem.name,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(classItem.hasSchedule
+                          ? '${classItem.subjects.length} asignaturas'
+                          : 'Horario sin crear'),
+                      trailing: const Icon(Icons.chevron_right),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _buildScheduleSetup() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.calendar_month_outlined,
+                  size: 42, color: Color(0xFF46C4B2)),
+              const SizedBox(height: 14),
+              Text('Aún no hay horario',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 6),
+              const Text('Crea un horario semanal para esta clase.'),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: _createSchedule,
+                icon: const Icon(Icons.add),
+                label: const Text('Crear horario'),
+              ),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildDesktopDashboard() => Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -318,132 +565,153 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _buildWeeklySchedule() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Horario semanal',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 4),
-                Text('Pulsa una clase para añadir una tarea o examen.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const SizedBox(width: _desktopTimeColumnWidth),
-                    for (final day in weekdays)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Container(
-                            height: 40,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF344246),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(day,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700)),
+  Widget _buildWeeklySchedule() {
+    final classItem = _selectedClass;
+    if (classItem == null) return const SizedBox.shrink();
+    if (!classItem.hasSchedule) return _buildScheduleSetup();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+          child: _buildScheduleToolbar(classItem),
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const SizedBox(width: _desktopTimeColumnWidth),
+                  for (final day in weekdays)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Container(
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF344246),
+                            borderRadius: BorderRadius.circular(6),
                           ),
+                          child: Text(day,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
                         ),
                       ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Expanded(
-                  child: Column(
-                    children: [
-                      for (var row = 0; row < 7; row++)
-                        Expanded(
-                          child: row == 3
-                              ? _WeeklyBreakRow()
-                              : Row(
-                                  children: [
-                                    SizedBox(
-                                      width: _desktopTimeColumnWidth,
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(3),
-                                        child: Container(
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF2D393C),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            row < 3
-                                                ? classTimes[row]
-                                                : classTimes[row - 1],
-                                            textAlign: TextAlign.center,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .labelSmall,
-                                          ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Expanded(
+                child: Column(
+                  children: [
+                    for (var row = 0; row < 7; row++)
+                      Expanded(
+                        child: row == 3
+                            ? const _WeeklyBreakRow()
+                            : Row(
+                                children: [
+                                  SizedBox(
+                                    width: _desktopTimeColumnWidth,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(3),
+                                      child: Container(
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2D393C),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          classTimes[row < 3 ? row : row - 1],
+                                          textAlign: TextAlign.center,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall,
                                         ),
                                       ),
                                     ),
-                                    for (final day in weekdays)
-                                      Expanded(
-                                        child: _WeeklyClassCell(
-                                          subject: scheduleByDay[day]![
-                                              row < 3 ? row : row - 1],
-                                          teacher: teachers[scheduleByDay[day]![
-                                              row < 3 ? row : row - 1]]!,
-                                          onTap: () => _editTask(
-                                            day: day,
-                                            subject: scheduleByDay[day]![
-                                                row < 3 ? row : row - 1],
-                                          ),
-                                        ),
+                                  ),
+                                  for (final day in weekdays)
+                                    Expanded(
+                                      child: _buildDesktopScheduleCell(
+                                        classItem,
+                                        day,
+                                        row < 3 ? row : row - 1,
                                       ),
-                                  ],
-                                ),
-                        ),
-                    ],
-                  ),
+                                    ),
+                                ],
+                              ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScheduleToolbar(ScheduleClass classItem) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ScheduleHeading(name: classItem.name),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              if (!classItem.isComplete)
+                FilledButton.tonalIcon(
+                  onPressed: _createSubject,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Crear asignatura'),
+                ),
+              OutlinedButton.icon(
+                onPressed: () => setState(
+                    () => _editingSchedule = !_editingSchedule),
+                icon: Icon(_editingSchedule
+                    ? Icons.check
+                    : Icons.edit_calendar_outlined),
+                label: Text(_editingSchedule ? 'Terminar edición' : 'Editar horario'),
+              ),
+            ],
           ),
         ],
       );
 
+  Widget _buildDesktopScheduleCell(
+    ScheduleClass classItem,
+    String day,
+    int period,
+  ) {
+    final subject = classItem.subjectById(classItem.cells['${day}_$period']);
+    if (subject == null) {
+      return _EmptyScheduleCell(
+        key: ValueKey('schedule-cell-$day-$period'),
+        onTap: () => _assignScheduleCell(day, period),
+      );
+    }
+    return _WeeklyClassCell(
+      subject: subject,
+      onTap: () => _tapScheduleCell(day, period, subject),
+      editing: _editingSchedule,
+    );
+  }
+
   Widget _buildSchedule() {
+    final classItem = _selectedClass;
+    if (classItem == null) return const SizedBox.shrink();
+    if (!classItem.hasSchedule) return _buildScheduleSetup();
     final day = weekdays[_selectedDay];
-    final daySchedule = scheduleByDay[day]!;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       children: [
-        Text(
-          '2º Desarrollo de Aplicaciones Multiplataforma',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Pulsa una clase para apuntar una tarea o un examen.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-        ),
-        const SizedBox(height: 18),
+        _buildScheduleToolbar(classItem),
+        const SizedBox(height: 16),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -460,22 +728,211 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        for (var index = 0; index < daySchedule.length; index++) ...[
-          if (index == 3) ...[
+        for (var period = 0; period < 6; period++) ...[
+          if (period == 3) ...[
             const SizedBox(height: 8),
             const _BreakRow(),
             const SizedBox(height: 8),
           ],
-          _ClassRow(
-            time: classTimes[index],
-            subject: daySchedule[index],
-            teacher: teachers[daySchedule[index]]!,
-            onTap: () => _editTask(day: day, subject: daySchedule[index]),
-          ),
-          if (index < daySchedule.length - 1) const SizedBox(height: 8),
+          _buildMobileScheduleCell(classItem, day, period),
+          if (period < 5) const SizedBox(height: 8),
         ],
       ],
     );
+  }
+
+  Widget _buildMobileScheduleCell(
+    ScheduleClass classItem,
+    String day,
+    int period,
+  ) {
+    final subject = classItem.subjectById(classItem.cells['${day}_$period']);
+    if (subject == null) {
+      return _EmptyScheduleRow(
+        key: ValueKey('schedule-cell-$day-$period'),
+        time: classTimes[period],
+        onTap: () => _assignScheduleCell(day, period),
+      );
+    }
+    return _ClassRow(
+      time: classTimes[period],
+      subject: subject,
+      onTap: () => _tapScheduleCell(day, period, subject),
+      editing: _editingSchedule,
+    );
+  }
+
+  Future<void> _assignScheduleCell(String day, int period) async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    if (classItem.subjects.isEmpty) {
+      _showMessage('No hay asignaturas. Crea una antes de rellenar el horario.');
+      return;
+    }
+    final selected = await showModalBottomSheet<ClassSubject>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+              child: Text('Elige asignatura',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            for (final subject in classItem.subjects)
+              ListTile(
+                leading: CircleAvatar(backgroundColor: _parseColor(subject.color)),
+                title: Text(subject.name),
+                subtitle: Text(subject.teacher),
+                onTap: () => Navigator.pop(context, subject),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    await _perform(() => _service.setScheduleCell(
+          classId: classItem.id,
+          day: day,
+          period: period,
+          subjectId: selected.id,
+        ));
+  }
+
+  void _tapScheduleCell(String day, int period, ClassSubject subject) {
+    if (_editingSchedule) {
+      _editScheduleCell(day, period, subject);
+    } else {
+      _editTask(day: day, subject: subject.name);
+    }
+  }
+
+  Future<void> _editScheduleCell(
+    String day,
+    int period,
+    ClassSubject subject,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Mover a otra hora'),
+              onTap: () => Navigator.pop(context, 'move'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Cambiar asignatura'),
+              onTap: () => Navigator.pop(context, 'change'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Vaciar casilla'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'change') {
+      await _assignScheduleCell(day, period);
+    } else if (action == 'delete') {
+      final classItem = _selectedClass;
+      if (classItem != null) {
+        await _perform(() => _service.setScheduleCell(
+              classId: classItem.id,
+              day: day,
+              period: period,
+              subjectId: null,
+            ));
+      }
+    } else if (action == 'move') {
+      await _moveScheduleCell(day, period, subject);
+    }
+  }
+
+  Future<void> _moveScheduleCell(
+    String fromDay,
+    int fromPeriod,
+    ClassSubject subject,
+  ) async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    final destinationSlots = [
+      for (final day in weekdays)
+        for (var period = 0; period < 6; period++)
+          if (!(day == fromDay && period == fromPeriod))
+            '${day}_$period',
+    ];
+    var selectedSlot = destinationSlots.first;
+    final destination = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Mover asignatura'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'Si eliges una franja ocupada, las asignaturas intercambiarán su sitio.'),
+              const SizedBox(height: 12),
+              DropdownButton<String>(
+                isExpanded: true,
+                value: selectedSlot,
+                items: [
+                  for (final slot in destinationSlots)
+                    DropdownMenuItem(
+                      value: slot,
+                      child: Text(_slotLabel(classItem, slot)),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) setDialogState(() => selectedSlot = value);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, selectedSlot),
+              child: const Text('Mover'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || destination == null) return;
+    final separator = destination.lastIndexOf('_');
+    await _perform(() => _service.moveScheduleCell(
+          classId: classItem.id,
+          fromDay: fromDay,
+          fromPeriod: fromPeriod,
+          toDay: destination.substring(0, separator),
+          toPeriod: int.parse(destination.substring(separator + 1)),
+          subjectId: subject.id,
+          destinationSubjectId: classItem.cells[destination],
+        ));
+  }
+
+  String _slotLabel(ScheduleClass classItem, String slot) {
+    final separator = slot.lastIndexOf('_');
+    final day = slot.substring(0, separator);
+    final period = int.parse(slot.substring(separator + 1));
+    final target = classItem.subjectById(classItem.cells[slot]);
+    return '$day · ${classTimes[period]} · ${target?.name ?? 'Vacía'}';
   }
 
   Widget _buildTasks({bool desktop = false}) {
@@ -485,18 +942,24 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'Tareas y exámenes', onSignIn: _showAccount)
           : _SignInPrompt(onSignIn: _showAccount);
     }
-    final visible =
-        _tasks.where((task) => task.completed == _showTaskHistory).toList();
+    final classItem = _selectedClass;
+    final visible = _tasks
+      .where((task) =>
+        (classItem == null ||
+          task.scheduleId == null ||
+          task.scheduleId == classItem.id) &&
+        task.completed == _showTaskHistory)
+      .toList();
     return Column(
       children: [
         _SectionHeader(
           title: _showTaskHistory ? 'Historial de tareas' : 'Pendientes',
           actionLabel: _showTaskHistory ? 'Ver pendientes' : 'Historial',
           compact: desktop,
-          onAdd: desktop
+          onAdd: desktop && classItem != null && classItem.subjects.isNotEmpty
               ? () => _editTask(
                     day: weekdays[_selectedDay],
-                    subject: scheduleByDay[weekdays[_selectedDay]]!.first,
+                    subject: classItem.subjects.first.name,
                   )
               : null,
           onAction: () => setState(() => _showTaskHistory = !_showTaskHistory),
@@ -592,6 +1055,86 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+String _colorHex(Color color) =>
+  '#${color.toARGB32().toRadixString(16).substring(2)}';
+
+class _TaskDamLogo extends StatelessWidget {
+  const _TaskDamLogo({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.asset(
+            'icons/icon-192.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+}
+
+class _ScheduleHeading extends StatelessWidget {
+  const _ScheduleHeading({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 22,
+              height: 3,
+              decoration: BoxDecoration(
+                color: colors.primary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '2º DAM  ·  HORARIO',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          name,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                height: 1.2,
+              ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'Selecciona una casilla vacía para añadir una asignatura.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+                height: 1.35,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
 class _DesktopPanel extends StatelessWidget {
   const _DesktopPanel({required this.child});
 
@@ -609,16 +1152,72 @@ class _DesktopPanel extends StatelessWidget {
       );
 }
 
+class _EmptyScheduleCell extends StatelessWidget {
+  const _EmptyScheduleCell({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(3),
+        child: Material(
+          color: const Color(0xFF263235),
+          borderRadius: BorderRadius.circular(6),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: onTap,
+            child: Center(
+              child: Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
+            ),
+          ),
+        ),
+      );
+}
+
+class _EmptyScheduleRow extends StatelessWidget {
+  const _EmptyScheduleRow({super.key, required this.time, required this.onTap});
+
+  final String time;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 105,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(time,
+                        style: Theme.of(context).textTheme.labelMedium),
+                  ),
+                ),
+                Expanded(
+                  child: Icon(Icons.add,
+                      color: Theme.of(context).colorScheme.primary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
 class _WeeklyClassCell extends StatefulWidget {
   const _WeeklyClassCell({
     required this.subject,
-    required this.teacher,
     required this.onTap,
+    required this.editing,
   });
 
-  final String subject;
-  final String teacher;
+  final ClassSubject subject;
   final VoidCallback onTap;
+  final bool editing;
 
   @override
   State<_WeeklyClassCell> createState() => _WeeklyClassCellState();
@@ -629,7 +1228,7 @@ class _WeeklyClassCellState extends State<_WeeklyClassCell> {
 
   @override
   Widget build(BuildContext context) {
-    final color = subjectColors[widget.subject]!;
+    final color = _parseColor(widget.subject.color);
     final radius = BorderRadius.circular(6);
     return Padding(
       padding: const EdgeInsets.all(3),
@@ -645,6 +1244,9 @@ class _WeeklyClassCellState extends State<_WeeklyClassCell> {
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: radius,
+            border: widget.editing
+                ? Border.all(color: Colors.white70, width: 1.5)
+                : null,
             boxShadow: _hovered
                 ? [
                     BoxShadow(
@@ -667,7 +1269,7 @@ class _WeeklyClassCellState extends State<_WeeklyClassCell> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      widget.subject,
+                      widget.subject.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context)
@@ -676,7 +1278,7 @@ class _WeeklyClassCellState extends State<_WeeklyClassCell> {
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     Text(
-                      widget.teacher,
+                      widget.subject.teacher,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context)
@@ -733,14 +1335,14 @@ class _ClassRow extends StatelessWidget {
   const _ClassRow({
     required this.time,
     required this.subject,
-    required this.teacher,
     required this.onTap,
+    required this.editing,
   });
 
   final String time;
-  final String subject;
-  final String teacher;
+  final ClassSubject subject;
   final VoidCallback onTap;
+  final bool editing;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -750,7 +1352,7 @@ class _ClassRow extends StatelessWidget {
           child: IntrinsicHeight(
             child: Row(
               children: [
-                Container(width: 5, color: subjectColors[subject]),
+                Container(width: 5, color: _parseColor(subject.color)),
                 SizedBox(
                   width: 100,
                   child: Padding(
@@ -766,12 +1368,12 @@ class _ClassRow extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(subject,
+                        Text(subject.name,
                             style: Theme.of(context)
                                 .textTheme
                                 .titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w800)),
-                        Text('Prof. $teacher',
+                        Text('Prof. ${subject.teacher}',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall
@@ -783,9 +1385,12 @@ class _ClassRow extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Icon(Icons.add_circle_outline, size: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Icon(
+                    editing ? Icons.edit_outlined : Icons.add_circle_outline,
+                    size: 20,
+                  ),
                 ),
               ],
             ),

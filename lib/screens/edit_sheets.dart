@@ -3,7 +3,222 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
 import '../data/schedule.dart';
+import '../models/schedule_class.dart';
 import '../models/task.dart';
+
+class ClassDraft {
+  const ClassDraft(this.name);
+
+  final String name;
+}
+
+class ClassEditorSheet extends StatefulWidget {
+  const ClassEditorSheet({super.key, this.initialName});
+
+  final String? initialName;
+
+  @override
+  State<ClassEditorSheet> createState() => _ClassEditorSheetState();
+}
+
+class _ClassEditorSheetState extends State<ClassEditorSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+
+  bool get _isEditing => widget.initialName != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, ClassDraft(_nameController.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              22, 12, 22, 24 + MediaQuery.viewInsetsOf(context).bottom),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_isEditing ? 'Editar nombre de clase' : 'Crear clase',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 18),
+                TextFormField(
+                  controller: _nameController,
+                  autofocus: true,
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la clase',
+                    hintText: 'Por ejemplo, 2º DAM',
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Escribe un nombre.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _save,
+                    icon: Icon(_isEditing ? Icons.save_outlined : Icons.add),
+                    label: Text(_isEditing ? 'Guardar nombre' : 'Crear clase'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class SubjectDraft {
+  const SubjectDraft({
+    required this.name,
+    required this.teacher,
+    required this.color,
+  });
+
+  final String name;
+  final String teacher;
+  final Color color;
+}
+
+class SubjectEditorSheet extends StatefulWidget {
+  const SubjectEditorSheet({super.key});
+
+  @override
+  State<SubjectEditorSheet> createState() => _SubjectEditorSheetState();
+}
+
+class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
+  static const _colors = [
+    Color(0xFF2787A0),
+    Color(0xFF2D8A62),
+    Color(0xFFAD623C),
+    Color(0xFF7059A5),
+    Color(0xFFB28A23),
+    Color(0xFF3C687D),
+    Color(0xFFAA4961),
+    Color(0xFF59666A),
+  ];
+
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _teacherController = TextEditingController();
+  Color _color = _colors.first;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _teacherController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      SubjectDraft(
+        name: _nameController.text.trim(),
+        teacher: _teacherController.text.trim(),
+        color: _color,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Crear asignatura',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    controller: _nameController,
+                    autofocus: true,
+                    maxLength: 60,
+                    decoration: const InputDecoration(labelText: 'Nombre'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Escribe un nombre.'
+                        : null,
+                  ),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _teacherController,
+                    maxLength: 60,
+                    decoration: const InputDecoration(labelText: 'Profesor'),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Escribe el nombre del profesor.'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Color', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final color in _colors)
+                        InkWell(
+                          onTap: () => setState(() => _color = color),
+                          customBorder: const CircleBorder(),
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _color == color
+                                    ? Colors.white
+                                    : Colors.transparent,
+                                width: 3,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _save,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Añadir asignatura'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
 
 class TaskDraft {
   const TaskDraft({
@@ -33,11 +248,13 @@ class TaskEditorSheet extends StatefulWidget {
     super.key,
     required this.day,
     required this.subject,
+    this.availableSubjects = const [],
     this.task,
   });
 
   final String day;
   final String subject;
+  final List<ClassSubject> availableSubjects;
   final TaskItem? task;
 
   @override
@@ -51,6 +268,13 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
   late String _subject;
   late DateTime _weekStart;
   late bool _isExam;
+
+  List<String> get _subjectOptions {
+    final options = widget.availableSubjects.isEmpty
+        ? subjects
+        : widget.availableSubjects.map((subject) => subject.name).toList();
+    return options.contains(_subject) ? options : [...options, _subject];
+  }
 
   @override
   void initState() {
@@ -128,7 +352,10 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                         child: DropdownButtonFormField<String>(
                           initialValue: _subject,
                           decoration: const InputDecoration(labelText: 'Asignatura'),
-                          items: subjects.map((subject) => DropdownMenuItem(value: subject, child: Text(subject))).toList(),
+                            items: _subjectOptions
+                              .map((subject) => DropdownMenuItem(
+                                value: subject, child: Text(subject)))
+                              .toList(),
                           onChanged: (value) => setState(() => _subject = value!),
                         ),
                       ),
@@ -180,9 +407,14 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
 }
 
 class ReminderEditorSheet extends StatefulWidget {
-  const ReminderEditorSheet({super.key, this.reminder});
+  const ReminderEditorSheet({
+    super.key,
+    this.reminder,
+    this.availableSubjects = const [],
+  });
 
   final ReminderItem? reminder;
+  final List<String> availableSubjects;
 
   @override
   State<ReminderEditorSheet> createState() => _ReminderEditorSheetState();
@@ -192,6 +424,16 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _messageController;
   late String? _subject;
+
+  List<String> get _subjectOptions {
+    final options = widget.availableSubjects.isEmpty
+        ? subjects
+        : widget.availableSubjects;
+    final selected = _subject;
+    return selected == null || options.contains(selected)
+        ? options
+        : [...options, selected];
+  }
 
   @override
   void initState() {
@@ -235,7 +477,10 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
                   DropdownButtonFormField<String>(
                     initialValue: _subject,
                     decoration: const InputDecoration(labelText: 'Asignatura'),
-                    items: subjects.map((subject) => DropdownMenuItem(value: subject, child: Text(subject))).toList(),
+                    items: _subjectOptions
+                      .map((subject) => DropdownMenuItem(
+                        value: subject, child: Text(subject)))
+                      .toList(),
                     validator: (value) => value == null ? 'Selecciona una asignatura.' : null,
                     onChanged: (value) => setState(() => _subject = value),
                   ),
