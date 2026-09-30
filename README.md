@@ -1,25 +1,58 @@
 # Horario 2º DAM
 
-Aplicación web estática para consultar el horario y guardar tareas y exámenes en Supabase. Cada persona inicia sesión con su cuenta y solo puede consultar y modificar sus propios apuntes.
+La versión web estática usa Supabase. La aplicación Flutter usa Firebase Authentication y Cloud Firestore; cada usuario solo puede consultar y modificar sus propios apuntes. Son clientes separados y esta migración no copia automáticamente usuarios ni datos de Supabase a Firebase.
 
 ## Aplicación Flutter
 
-La app Flutter está en `lib/` y reutiliza las tablas `tasks` y `reminders` de Supabase. Incluye horario por día, acceso y registro por correo, tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado. Usa la misma configuración de Supabase y las políticas RLS ya descritas abajo.
+La app Flutter está en `lib/` y guarda tareas y recordatorios en `users/{uid}/tasks` y `users/{uid}/reminders` de Firestore. El acceso y el registro usan Firebase Authentication con correo y contraseña. Incluye horario, tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado.
 
-Requisitos: Flutter 3.27 o posterior y un dispositivo/emulador Android, iOS o navegador. Para generar los proyectos de plataforma sin reemplazar el `lib/` ni el `pubspec.yaml` de este repositorio, crea el esqueleto en una carpeta temporal y copia solo las plataformas:
+Configuración inicial:
+
+Si el repositorio no contiene las carpetas de plataforma, genéralas fuera del proyecto y copia solo esas carpetas para no reemplazar `lib/` ni `pubspec.yaml`:
 
 ```sh
 flutter create --project-name taskdam --org es.taskdam --platforms=android,ios,web /tmp/taskdam-platforms
-cp -a /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-platforms/web .
-flutter pub get
-flutter run --dart-define=SUPABASE_URL=https://tu-proyecto.supabase.co --dart-define=SUPABASE_ANON_KEY=tu-clave-publica
+cp -an /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-platforms/web .
 ```
 
-En Linux, la compilación iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La clave anon es pública y las políticas RLS del esquema siguen siendo la protección de los datos. No incluyas claves `service_role`.
+1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com/).
+2. En **Authentication > Sign-in method**, habilita **Email/Password**.
+3. Crea una base de datos en **Firestore Database**.
+4. Instala y autentica Firebase CLI y FlutterFire CLI:
 
-La sincronización con Google Calendar de la versión web aún no está portada: para añadirla en Flutter hay que registrar y configurar clientes OAuth nativos de Android/iOS, además del ID web existente.
+   ```sh
+   npm install -g firebase-tools
+   firebase login
+   dart pub global activate flutterfire_cli
+   ```
 
-## Configuración de Supabase
+5. Desde la raíz del repositorio, registra las plataformas y genera `lib/firebase_options.dart`:
+
+   ```sh
+   flutterfire configure --project TU_PROJECT_ID --platforms web,android,ios
+   ```
+
+   El comando configura los proyectos nativos y reemplaza la plantilla de opciones incluida.
+6. Publica las reglas de seguridad de `firestore.rules`:
+
+   ```sh
+   firebase deploy --only firestore:rules --project TU_PROJECT_ID
+   ```
+
+7. Instala dependencias y ejecuta la app:
+
+   ```sh
+   flutter pub get
+   flutter run -d chrome
+   ```
+
+   Para Android/iOS, conecta un dispositivo o inicia un emulador y ejecuta `flutter run`.
+
+No pongas credenciales de cuentas de servicio en la app. La seguridad depende de Firebase Authentication y las reglas de Firestore. Los usuarios y apuntes que ya están en Supabase permanecen allí; hay que crear las cuentas de nuevo en Firebase y exportar/importar los apuntes por separado si quieres conservarlos.
+
+En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La sincronización con Google Calendar de la versión web aún no está portada a Flutter.
+
+## Configuración de Supabase (versión web)
 
 Los recordatorios se guardan en la tabla `reminders`. Si ya configuraste la app, ejecuta [`supabase/migration-add-reminders.sql`](supabase/migration-add-reminders.sql) en el SQL Editor.
 

@@ -1,30 +1,42 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../data/schedule.dart';
 import '../models/task.dart';
 
 class TaskService {
-  TaskService(this._client);
+  TaskService(this._firestore, this._auth);
 
-  final SupabaseClient _client;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
+
+  CollectionReference<Map<String, dynamic>> _userCollection(String name) {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('Inicia sesión para acceder a tus datos.');
+    return _firestore.collection('users').doc(user.uid).collection(name);
+  }
 
   Future<List<TaskItem>> loadTasks() async {
-    final rows = await _client
-        .from('tasks')
-        .select('id, day, subject, message, color, week_start, is_exam, completed')
-        .order('created_at', ascending: false);
-    return (rows as List)
-        .map((row) => TaskItem.fromMap(Map<String, dynamic>.from(row)))
+    final snapshot = await _userCollection('tasks')
+        .orderBy('created_at', descending: true)
+        .get();
+    return snapshot.docs
+        .map((document) => TaskItem.fromMap({
+              ...document.data(),
+              'id': document.id,
+            }))
         .toList();
   }
 
   Future<List<ReminderItem>> loadReminders() async {
-    final rows = await _client
-        .from('reminders')
-        .select('id, subject, message, completed')
-        .order('created_at', ascending: false);
-    return (rows as List)
-        .map((row) => ReminderItem.fromMap(Map<String, dynamic>.from(row)))
+    final snapshot = await _userCollection('reminders')
+        .orderBy('created_at', descending: true)
+        .get();
+    return snapshot.docs
+        .map((document) => ReminderItem.fromMap({
+              ...document.data(),
+              'id': document.id,
+            }))
         .toList();
   }
 
@@ -37,7 +49,8 @@ class TaskService {
     required DateTime weekStart,
     required bool isExam,
   }) async {
-    final values = {
+    final collection = _userCollection('tasks');
+    final values = <String, dynamic>{
       'day': day,
       'subject': subject,
       'message': message,
@@ -46,18 +59,20 @@ class TaskService {
       'is_exam': isExam,
     };
     if (id == null) {
-      await _client.from('tasks').insert(values);
+      values['completed'] = false;
+      values['created_at'] = FieldValue.serverTimestamp();
+      await collection.add(values);
     } else {
-      await _client.from('tasks').update(values).eq('id', id);
+      await collection.doc(id).update(values);
     }
   }
 
   Future<void> setTaskCompleted(String id, bool completed) async {
-    await _client.from('tasks').update({'completed': completed}).eq('id', id);
+    await _userCollection('tasks').doc(id).update({'completed': completed});
   }
 
   Future<void> deleteTask(String id) async {
-    await _client.from('tasks').delete().eq('id', id);
+    await _userCollection('tasks').doc(id).delete();
   }
 
   Future<void> saveReminder({
@@ -65,22 +80,27 @@ class TaskService {
     required String subject,
     required String message,
   }) async {
-    final values = {'subject': subject, 'message': message};
+    final collection = _userCollection('reminders');
+    final values = <String, dynamic>{
+      'subject': subject,
+      'message': message,
+    };
     if (id == null) {
-      await _client.from('reminders').insert(values);
+      values['completed'] = false;
+      values['created_at'] = FieldValue.serverTimestamp();
+      await collection.add(values);
     } else {
-      await _client.from('reminders').update(values).eq('id', id);
+      await collection.doc(id).update(values);
     }
   }
 
   Future<void> setReminderCompleted(String id, bool completed) async {
-    await _client
-        .from('reminders')
-        .update({'completed': completed})
-        .eq('id', id);
+    await _userCollection('reminders')
+        .doc(id)
+        .update({'completed': completed});
   }
 
   Future<void> deleteReminder(String id) async {
-    await _client.from('reminders').delete().eq('id', id);
+    await _userCollection('reminders').doc(id).delete();
   }
 }

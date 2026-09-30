@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:taskdam/screens/home_screen.dart';
 
 void main() {
@@ -15,12 +16,14 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final client = SupabaseClient(
-      'https://example.supabase.co',
-      'test-key',
-      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          auth: MockFirebaseAuth(),
+          firestore: FakeFirebaseFirestore(),
+        ),
+      ),
     );
-    await tester.pumpWidget(MaterialApp(home: HomeScreen(client: client)));
     await tester.pump();
 
     expect(
@@ -44,12 +47,14 @@ void main() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
     });
-    final client = SupabaseClient(
-      'https://example.supabase.co',
-      'test-key',
-      authOptions: const AuthClientOptions(autoRefreshToken: false),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeScreen(
+          auth: MockFirebaseAuth(),
+          firestore: FakeFirebaseFirestore(),
+        ),
+      ),
     );
-    await tester.pumpWidget(MaterialApp(home: HomeScreen(client: client)));
     await tester.pump();
 
     expect(find.byType(ChoiceChip), findsNWidgets(5));

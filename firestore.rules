@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function validTask() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'day', 'subject', 'message', 'color', 'week_start',
+          'is_exam', 'completed', 'created_at'
+        ])
+        && data.keys().hasOnly([
+          'day', 'subject', 'message', 'color', 'week_start',
+          'is_exam', 'completed', 'created_at'
+        ])
+        && data.day in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        && data.subject is string
+        && data.message is string
+        && data.message.size() > 0
+        && data.message.size() <= 500
+        && data.color is string
+        && data.week_start is string
+        && data.week_start.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.is_exam is bool
+        && data.completed is bool
+        && data.created_at is timestamp;
+    }
+
+    function validReminder() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['subject', 'message', 'completed', 'created_at'])
+        && data.keys().hasOnly(['subject', 'message', 'completed', 'created_at'])
+        && data.subject is string
+        && data.message is string
+        && data.message.size() > 0
+        && data.message.size() <= 500
+        && data.completed is bool
+        && data.created_at is timestamp;
+    }
+
+    match /users/{userId}/tasks/{taskId} {
+      allow read, delete: if owns(userId);
+      allow create, update: if owns(userId) && validTask();
+    }
+
+    match /users/{userId}/reminders/{reminderId} {
+      allow read, delete: if owns(userId);
+      allow create, update: if owns(userId) && validReminder();
+    }
+  }
+}

@@ -1,21 +1,46 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'firebase_options.dart';
 import 'screens/home_screen.dart';
-
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  var firebaseConfigured = false;
+  String? configurationError;
+
+  try {
+    final options = DefaultFirebaseOptions.currentPlatform;
+    firebaseConfigured = options.apiKey.isNotEmpty &&
+        options.appId.isNotEmpty &&
+        options.messagingSenderId.isNotEmpty &&
+        options.projectId.isNotEmpty;
+    if (firebaseConfigured) {
+      await Firebase.initializeApp(options: options);
+    } else {
+      configurationError = 'Faltan las opciones de Firebase de esta plataforma.';
+    }
+  } catch (error) {
+    configurationError = error.toString();
   }
-  runApp(const TaskDamApp());
+
+  runApp(TaskDamApp(
+    firebaseConfigured: firebaseConfigured,
+    configurationError: configurationError,
+  ));
 }
 
 class TaskDamApp extends StatelessWidget {
-  const TaskDamApp({super.key});
+  const TaskDamApp({
+    super.key,
+    required this.firebaseConfigured,
+    this.configurationError,
+  });
+
+  final bool firebaseConfigured;
+  final String? configurationError;
 
   @override
   Widget build(BuildContext context) {
@@ -52,43 +77,56 @@ class TaskDamApp extends StatelessWidget {
           filled: true,
           fillColor: surface,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF46565A)),
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+            borderSide: BorderSide(color: Color(0xFF46565A)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF46565A)),
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+            borderSide: BorderSide(color: Color(0xFF46565A)),
           ),
         ),
       ),
-      home: supabaseUrl.isEmpty || supabaseAnonKey.isEmpty
-          ? const ConfigurationPage()
-          : HomeScreen(client: Supabase.instance.client),
+      home: firebaseConfigured
+          ? HomeScreen(
+              auth: FirebaseAuth.instance,
+              firestore: FirebaseFirestore.instance,
+            )
+          : ConfigurationPage(error: configurationError),
     );
   }
 }
 
 class ConfigurationPage extends StatelessWidget {
-  const ConfigurationPage({super.key});
+  const ConfigurationPage({super.key, this.error});
+
+  final String? error;
 
   @override
   Widget build(BuildContext context) => Scaffold(
         body: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
+            constraints: const BoxConstraints(maxWidth: 520),
             child: Padding(
               padding: const EdgeInsets.all(28),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.calendar_month, size: 42, color: Color(0xFF46C4B2)),
+                  const Icon(Icons.calendar_month,
+                      size: 42, color: Color(0xFF46C4B2)),
                   const SizedBox(height: 20),
-                  Text('TaskDAM', style: Theme.of(context).textTheme.headlineMedium),
+                  Text('TaskDAM',
+                      style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 12),
                   const Text(
-                    'Falta configurar la conexión con Supabase. Inicia la app pasando SUPABASE_URL y SUPABASE_ANON_KEY como argumentos --dart-define.',
+                    'Configura Firebase ejecutando flutterfire configure desde la raíz del proyecto. El asistente generará las opciones necesarias para web, Android e iOS.',
                   ),
+                  if (error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(error!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
+                  ],
                 ],
               ),
             ),

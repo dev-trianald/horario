@@ -1,8 +1,9 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/schedule.dart';
 import '../models/task.dart';
@@ -10,18 +11,23 @@ import '../services/task_service.dart';
 import 'edit_sheets.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.client});
+  const HomeScreen({
+    super.key,
+    required this.auth,
+    required this.firestore,
+  });
 
-  final SupabaseClient client;
+  final FirebaseAuth auth;
+  final FirebaseFirestore firestore;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final TaskService _service = TaskService(widget.client);
-  late User? _user = widget.client.auth.currentUser;
-  StreamSubscription<AuthState>? _authSubscription;
+  late final TaskService _service = TaskService(widget.firestore, widget.auth);
+  late User? _user = widget.auth.currentUser;
+  StreamSubscription<User?>? _authSubscription;
   List<TaskItem> _tasks = [];
   List<ReminderItem> _reminders = [];
   bool _loadingData = false;
@@ -33,9 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _authSubscription = widget.client.auth.onAuthStateChange.listen((state) {
+    _authSubscription = widget.auth.authStateChanges().listen((user) {
       if (!mounted) return;
-      setState(() => _user = state.session?.user);
+      setState(() => _user = user);
       if (_user == null) {
         setState(() {
           _tasks = [];
@@ -97,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _user == null
-          ? AuthSheet(client: widget.client)
+          ? AuthSheet(auth: widget.auth)
           : SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
@@ -113,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     FilledButton.tonalIcon(
                       onPressed: () async {
                         Navigator.pop(context);
-                        await widget.client.auth.signOut();
+                        await widget.auth.signOut();
                       },
                       icon: const Icon(Icons.logout),
                       label: const Text('Cerrar sesión'),

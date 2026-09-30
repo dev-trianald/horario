@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/schedule.dart';
 import '../models/task.dart';
@@ -272,9 +272,9 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
 }
 
 class AuthSheet extends StatefulWidget {
-  const AuthSheet({super.key, required this.client});
+  const AuthSheet({super.key, required this.auth});
 
-  final SupabaseClient client;
+  final FirebaseAuth auth;
 
   @override
   State<AuthSheet> createState() => _AuthSheetState();
@@ -303,24 +303,23 @@ class _AuthSheetState extends State<AuthSheet> {
     });
     try {
       if (_createAccount) {
-        final response = await widget.client.auth.signUp(
+        await widget.auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
-        if (response.session == null && mounted) {
-          setState(() => _feedback = 'Cuenta creada. Revisa tu correo para confirmar la dirección.');
-        } else if (mounted) {
-          Navigator.pop(context);
-        }
       } else {
-        await widget.client.auth.signInWithPassword(
+        await widget.auth.signInWithEmailAndPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
-        if (mounted) Navigator.pop(context);
       }
-    } catch (error) {
-      if (mounted) setState(() => _feedback = error.toString());
+      if (mounted) Navigator.pop(context);
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _feedback = _authErrorMessage(error));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _feedback = 'No se pudo conectar con Firebase. Comprueba la conexión e inténtalo de nuevo.');
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -396,3 +395,15 @@ class _AuthSheetState extends State<AuthSheet> {
         ),
       );
 }
+
+String _authErrorMessage(FirebaseAuthException error) => switch (error.code) {
+      'email-already-in-use' => 'Ya existe una cuenta con ese correo.',
+      'invalid-email' => 'El correo no tiene un formato válido.',
+      'weak-password' => 'La contraseña es demasiado débil.',
+      'user-not-found' || 'wrong-password' || 'invalid-credential' =>
+        'El correo o la contraseña no son correctos.',
+      'user-disabled' => 'Esta cuenta está desactivada.',
+      'too-many-requests' => 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
+      'network-request-failed' => 'No hay conexión con Firebase. Comprueba la configuración y tu conexión a Internet.',
+      _ => error.message ?? 'No se pudo iniciar sesión.',
+    };
