@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../data/schedule.dart';
 import '../models/schedule_class.dart';
 import '../models/task.dart';
+import '../services/google_calendar_service.dart';
 import '../services/task_service.dart';
 import 'edit_sheets.dart';
 
@@ -29,6 +30,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final TaskService _service = TaskService(widget.firestore, widget.auth);
+  final GoogleCalendarService _calendarService = GoogleCalendarService();
   late User? _user = widget.auth.currentUser;
   StreamSubscription<User?>? _authSubscription;
   List<ScheduleClass> _classes = [];
@@ -40,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loadingData = false;
   bool _loadingClassMembers = false;
   bool _loadingMemberItems = false;
+  bool _calendarBusy = false;
   bool _showTaskHistory = false;
   bool _showReminderHistory = false;
   bool _showClassMembers = false;
@@ -65,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() => _user = user);
       if (_user == null) {
+        unawaited(_calendarService.disconnect());
         setState(() {
           _classes = [];
           _selectedClassId = null;
@@ -255,6 +259,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(_user?.email ?? ''),
                     const SizedBox(height: 20),
                     FilledButton.tonalIcon(
+                      onPressed: _calendarBusy
+                        ? null
+                        : () {
+                          Navigator.pop(context);
+                          unawaited(_toggleGoogleCalendar());
+                        },
+                      icon: Icon(_calendarService.isConnected
+                        ? Icons.event_busy_outlined
+                        : Icons.calendar_month_outlined),
+                      label: Text(_calendarBusy
+                        ? 'Conectando Calendar…'
+                        : _calendarService.isConnected
+                          ? 'Desconectar Google Calendar'
+                          : 'Conectar Google Calendar'),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
                       onPressed: () async {
                         Navigator.pop(context);
                         await widget.auth.signOut();
@@ -267,6 +288,29 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
     );
+  }
+
+  Future<void> _toggleGoogleCalendar() async {
+    final email = _user?.email;
+    if (email == null || _calendarBusy) return;
+    setState(() => _calendarBusy = true);
+    try {
+      if (_calendarService.isConnected) {
+        await _calendarService.disconnect();
+        _showMessage('Google Calendar desconectado.');
+        return;
+      }
+      final connectedEmail = await _calendarService.connect(email);
+      if (connectedEmail == null) return;
+      for (final task in _tasks) {
+        await _calendarService.syncTask(task, update: true);
+      }
+      _showMessage('Google Calendar conectado: $connectedEmail.');
+    } catch (error) {
+      _showMessage('No se pudo sincronizar Google Calendar: $error');
+    } finally {
+      if (mounted) setState(() => _calendarBusy = false);
+    }
   }
 
   Future<void> _editTask({
@@ -299,16 +343,27 @@ class _HomeScreenState extends State<HomeScreen> {
     final selectedSubject = classItem.subjects
         .where((item) => item.name == draft.subject)
         .firstOrNull;
-    await _perform(() => _service.saveTask(
-          id: task?.id,
-          day: draft.day,
-          subject: draft.subject,
-          message: draft.message,
-          color: selectedSubject?.color ?? '#2787A0',
-          weekStart: draft.weekStart,
-          isExam: draft.isExam,
-          scheduleId: classItem.id,
-        ));
+    String? savedTaskId;
+    await _perform(() async {
+      savedTaskId = await _service.saveTask(
+        id: task?.id,
+        day: draft.day,
+        subject: draft.subject,
+        message: draft.message,
+        color: selectedSubject?.color ?? '#2787A0',
+        weekStart: draft.weekStart,
+        isExam: draft.isExam,
+        scheduleId: classItem.id,
+      );
+    });
+    if (savedTaskId != null && _calendarService.isConnected) {
+      try {
+        final savedTask = _tasks.firstWhere((item) => item.id == savedTaskId);
+        await _calendarService.syncTask(savedTask, update: task != null);
+      } catch (error) {
+        _showMessage('La tarea se guardó, pero Calendar no se actualizó: $error');
+      }
+    }
   }
 
   Future<void> _editReminder({ReminderItem? reminder}) async {
@@ -415,7 +470,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _deleteTask(TaskItem task) async {
     if (!await _confirmDelete('¿Eliminar esta tarea?')) return;
-    await _perform(() => _service.deleteTask(task.id));
+    await _perform(() async {
+      if (_calendarService.isConnected) {
+        await _calendarService.deleteTask(task.id);
+      }
+      await _service.deleteTask(task.id);
+    });
   }
 
   Future<void> _deleteClass(ScheduleClass classItem) async {

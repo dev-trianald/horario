@@ -737,16 +737,12 @@ class _AuthSheetState extends State<AuthSheet> {
       _feedback = null;
     });
     try {
-      final provider = GoogleAuthProvider()
-        ..addScope('https://www.googleapis.com/auth/spreadsheets');
+      final provider = GoogleAuthProvider();
       if (kIsWeb) {
         await widget.auth.signInWithPopup(provider);
       } else {
         final googleSignIn = GoogleSignIn(
-          scopes: [
-            'email',
-            'https://www.googleapis.com/auth/spreadsheets',
-          ],
+          scopes: ['email'],
         );
         final account = await googleSignIn.signIn();
         if (account == null) return;

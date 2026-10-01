@@ -298,7 +298,7 @@ class TaskService {
         .toList();
   }
 
-  Future<void> saveTask({
+  Future<String> saveTask({
     String? id,
     required String day,
     required String subject,
@@ -321,9 +321,11 @@ class TaskService {
     if (id == null) {
       values['completed'] = false;
       values['created_at'] = FieldValue.serverTimestamp();
-      await collection.add(values);
+      final document = await collection.add(values);
+      return document.id;
     } else {
       await collection.doc(id).update(values);
+      return id;
     }
   }
 

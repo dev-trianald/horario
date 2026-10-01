@@ -4,7 +4,7 @@ La versión web estática y la aplicación Flutter usan Firebase Authentication 
 
 ## Aplicación Flutter
 
-La app Flutter está en `lib/` y guarda tareas y recordatorios en `users/{uid}/tasks` y `users/{uid}/reminders` de Firestore. El acceso admite Google y correo/contraseña. Al crear una clase puedes iniciar un horario desde cero o copiar las asignaturas y franjas de otra clase. Incluye tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado.
+La app Flutter está en `lib/` y guarda tareas y recordatorios en `users/{uid}/tasks` y `users/{uid}/reminders` de Firestore. El acceso admite Google y correo/contraseña. Al crear una clase puedes iniciar un horario desde cero o copiar las asignaturas y franjas de otra clase. Las tareas se pueden sincronizar opcionalmente con Google Calendar; los recordatorios sin fecha no se exportan.
 
 Configuración inicial:
 
@@ -50,7 +50,18 @@ cp -an /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-pl
 
 No pongas credenciales de cuentas de servicio en la app. La seguridad depende de Firebase Authentication y las reglas de Firestore. Los usuarios y apuntes que ya están en Supabase permanecen allí; hay que crear las cuentas de nuevo en Firebase y exportar/importar los apuntes por separado si quieres conservarlos.
 
-En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La sincronización con Google Calendar de la versión web aún no está portada a Flutter.
+En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK.
+
+### Publicar Flutter en Firebase Hosting
+
+El archivo `firebase.json` publica `build/web` en Firebase Hosting. Antes de conectar Calendar, añade `horario-eba89.web.app` a **Firebase Authentication > Settings > Authorized domains** y a **Authorized JavaScript origins** del cliente OAuth de Google indicado en `web/index.html`. Añade también `http://localhost` para desarrollo. Habilita Google Calendar API en el proyecto de Google Cloud y configura la pantalla de consentimiento y los usuarios de prueba.
+
+```sh
+flutter build web
+firebase deploy --only hosting --project horario-eba89
+```
+
+La URL de Hosting será `https://horario-eba89.web.app`. Al iniciar sesión, abre **Tu cuenta > Conectar Google Calendar**. Google pedirá permiso explícito; la app comprueba que el correo de Calendar coincide con Firebase Auth y conserva el token solo en memoria. La sincronización se pierde al recargar y requiere volver a conectar.
 
 ## Configuración de Firebase para la web
 
@@ -69,7 +80,7 @@ La web guarda los datos en `users/{uid}/tasks/{taskId}` y `users/{uid}/reminders
 
 Para publicar en GitHub Pages en `https://dev-trianald.github.io/horario/`, añade `dev-trianald.github.io` a **Firebase Authentication > Settings > Authorized domains**. Si restringes la API key por sitios web, permite `https://dev-trianald.github.io/*` y el origen local de desarrollo. En el cliente OAuth de Google, el origen autorizado es `https://dev-trianald.github.io` (sin `/horario/`); el origen local `http://localhost:8000` se añade por separado.
 
-Firebase Auth crea una sesión al registrar una cuenta y permite recuperar el acceso mediante los flujos de Firebase. Para iniciar sesión con Google u otro proveedor habrá que habilitarlo en Firebase Authentication y añadir el botón y el flujo correspondiente. El OAuth de Google Calendar es independiente y se configura con `googleClientId` en `config.js`.
+Firebase Auth crea una sesión al registrar una cuenta y permite recuperar el acceso mediante los flujos de Firebase. La versión estática de GitHub Pages conserva su configuración OAuth en `config.js`; la app Flutter sirve su cliente OAuth web desde `web/index.html`.
 
 La configuración cliente de Firebase no protege por sí sola los datos: las reglas de `firestore.rules` limitan cada operación a `users/{uid}`. Los usuarios y datos que sigan en Supabase no se trasladan automáticamente; hay que migrarlos por separado. Las cuentas necesitan volver a registrarse o seguir un proceso de migración de usuarios; no copies contraseñas ni credenciales de administración al cliente.
 
