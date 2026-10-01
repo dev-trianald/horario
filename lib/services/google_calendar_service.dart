@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
 
@@ -10,43 +11,64 @@ class GoogleCalendarService {
 
   static const _calendarScope =
       'https://www.googleapis.com/auth/calendar.events';
-  static const _userInfoScope =
-      'https://www.googleapis.com/auth/userinfo.email';
+  static const _keepConnectedKey = 'google_calendar_keep_connected';
 
   final http.Client _client;
   GoogleSignIn? _googleSignIn;
   GoogleSignInAccount? _account;
   String? _accessToken;
   String? _email;
+  bool _shouldStayConnected = false;
+  Future<bool>? _restoreFuture;
 
   bool get isConnected => _accessToken != null;
+  bool get shouldStayConnected => _shouldStayConnected;
   String? get connectedEmail => _email;
 
   GoogleSignIn get _signIn => _googleSignIn ??= GoogleSignIn(
-        scopes: [_calendarScope, _userInfoScope],
+      scopes: ['email', _calendarScope],
       );
 
   Future<String?> connect(String firebaseEmail) async {
     final account = await _signIn.signIn();
     if (account == null) return null;
 
+    final connectedEmail = await _activateAccount(account, firebaseEmail);
+    if (connectedEmail == null) return null;
+
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_keepConnectedKey, true);
+    _shouldStayConnected = true;
+    return connectedEmail;
+  }
+
+  Future<bool> restore(String firebaseEmail) {
+    return _restoreFuture ??= _restore(firebaseEmail).whenComplete(() {
+      _restoreFuture = null;
+    });
+  }
+
+  Future<bool> _restore(String firebaseEmail) async {
+    final preferences = await SharedPreferences.getInstance();
+    _shouldStayConnected = preferences.getBool(_keepConnectedKey) ?? false;
+    if (!_shouldStayConnected) return false;
+
+    final account = await _signIn.signInSilently();
+    if (account == null) return false;
+    return await _activateAccount(account, firebaseEmail) != null;
+  }
+
+  Future<String?> _activateAccount(
+      GoogleSignInAccount account, String firebaseEmail) async {
     final authentication = await account.authentication;
     final accessToken = authentication.accessToken;
     if (accessToken == null) {
       throw StateError('Google no devolvió permiso para acceder al calendario.');
     }
 
-    final response = await _client.get(
-      Uri.https('www.googleapis.com', '/oauth2/v3/userinfo'),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
-    if (response.statusCode != 200) {
-      throw StateError('No se pudo verificar la cuenta de Google.');
-    }
-    final profile = jsonDecode(response.body) as Map<String, dynamic>;
-    final email = (profile['email'] as String?)?.trim();
-    if (email == null || email.toLowerCase() != firebaseEmail.trim().toLowerCase()) {
-      await _signIn.disconnect();
+    final email = account.email.trim();
+    if (email.toLowerCase() != firebaseEmail.trim().toLowerCase()) {
+      _clearSession();
       throw StateError(
           'Conecta Google Calendar con la misma cuenta usada para iniciar sesión: $firebaseEmail.');
     }
@@ -58,7 +80,18 @@ class GoogleCalendarService {
   }
 
   Future<void> disconnect() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.remove(_keepConnectedKey);
+    _shouldStayConnected = false;
     if (_account != null) await _signIn.disconnect();
+    _clearSession();
+  }
+
+  void pauseForFirebaseSignOut() {
+    _clearSession();
+  }
+
+  void _clearSession() {
     _account = null;
     _accessToken = null;
     _email = null;

@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       setState(() => _user = user);
       if (_user == null) {
-        unawaited(_calendarService.disconnect());
+        _calendarService.pauseForFirebaseSignOut();
         setState(() {
           _classes = [];
           _selectedClassId = null;
@@ -76,10 +76,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _reminders = [];
         });
       } else {
-        unawaited(_loadData());
+        unawaited(_loadDataAndRestoreCalendar());
       }
     });
-    if (_user != null) unawaited(_loadData());
+    if (_user != null) unawaited(_loadDataAndRestoreCalendar());
   }
 
   @override
@@ -111,6 +111,29 @@ class _HomeScreenState extends State<HomeScreen> {
       _showMessage('No se pudieron cargar tus datos: $error');
     } finally {
       if (mounted) setState(() => _loadingData = false);
+    }
+  }
+
+  Future<void> _loadDataAndRestoreCalendar() async {
+    final signedInUser = _user;
+    if (signedInUser == null) return;
+    await _loadData();
+    if (!mounted || _user?.uid != signedInUser.uid) return;
+
+    final email = signedInUser.email;
+    if (email == null) return;
+    setState(() => _calendarBusy = true);
+    try {
+      final restored = await _calendarService.restore(email);
+      if (!restored || !mounted || _user?.uid != signedInUser.uid) return;
+      for (final task in _tasks) {
+        await _calendarService.syncTask(task, update: true);
+      }
+      if (mounted) setState(() {});
+    } catch (error) {
+      _showMessage('No se pudo reconectar Google Calendar: $error');
+    } finally {
+      if (mounted) setState(() => _calendarBusy = false);
     }
   }
 
@@ -272,7 +295,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'Conectando Calendar…'
                         : _calendarService.isConnected
                           ? 'Desconectar Google Calendar'
-                          : 'Conectar Google Calendar'),
+                            : _calendarService.shouldStayConnected
+                              ? 'Reconectar Google Calendar'
+                              : 'Conectar Google Calendar'),
                     ),
                     const SizedBox(height: 12),
                     FilledButton.tonalIcon(

@@ -111,23 +111,15 @@ class TaskService {
         throw StateError('No se ha encontrado ninguna clase con ese código.');
       }
       final membership = _userCollection('classes').doc(classId);
-      final memberDocument =
-          _sharedClass(classId!).collection('members').doc(_userId);
       final membershipSnapshot = await transaction.get(membership);
-      final memberSnapshot = await transaction.get(memberDocument);
       if (!membershipSnapshot.exists) {
         transaction.set(membership, {
           'access_code': normalizedCode,
           'created_at': FieldValue.serverTimestamp(),
         });
       }
-      if (!memberSnapshot.exists) {
-        transaction.set(memberDocument, {
-          'display_name': _memberName,
-          'created_at': FieldValue.serverTimestamp(),
-        });
-      }
     });
+    await _ensureClassMember(classId!);
     return classId!;
   }
 
@@ -143,17 +135,8 @@ class TaskService {
   }
 
   Future<List<ClassMember>> loadClassMembers(String classId) async {
+    await _ensureClassMember(classId);
     final memberCollection = _sharedClass(classId).collection('members');
-    final ownMember = memberCollection.doc(_userId);
-    if (!(await ownMember.get()).exists) {
-      final membership = await _userCollection('classes').doc(classId).get();
-      if (membership.data()?['access_code'] is String) {
-        await ownMember.set({
-          'display_name': _memberName,
-          'created_at': FieldValue.serverTimestamp(),
-        });
-      }
-    }
     final snapshot = await memberCollection.orderBy('display_name').get();
     return snapshot.docs
         .map((document) => ClassMember(
@@ -162,6 +145,18 @@ class TaskService {
                   'Usuario ${document.id.substring(0, 6)}',
             ))
         .toList();
+  }
+
+  Future<void> _ensureClassMember(String classId) async {
+    final membership = await _userCollection('classes').doc(classId).get();
+    if (membership.data()?['access_code'] is! String) return;
+    final ownMember =
+        _sharedClass(classId).collection('members').doc(_userId);
+    if ((await ownMember.get()).exists) return;
+    await ownMember.set({
+      'display_name': _memberName,
+      'created_at': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<List<TaskItem>> loadMemberTasks({
