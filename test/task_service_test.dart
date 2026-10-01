@@ -15,8 +15,7 @@ void main() {
     );
     final cells = {
       for (final day in weekdays)
-        for (var period = 0; period < 6; period++)
-          '${day}_$period': subject.id,
+        for (var period = 0; period < 6; period++) '${day}_$period': subject.id,
     };
     final completeClass = ScheduleClass(
       id: 'class-a',
@@ -71,6 +70,39 @@ void main() {
     expect(otherUserTasks.docs, isEmpty);
   });
 
+  test('keeps existing per-user classes usable as private schedules', () async {
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'student-a', email: 'student@example.com'),
+    );
+    final firestore = FakeFirebaseFirestore();
+    final legacyClass = firestore
+        .collection('users')
+        .doc('student-a')
+        .collection('classes')
+        .doc('legacy-class');
+    await legacyClass.set({
+      'name': 'Horario anterior',
+      'has_schedule': false,
+      'subjects': <Map<String, dynamic>>[],
+      'cells': <String, String>{},
+      'created_at': DateTime(2025, 9, 1),
+    });
+    final service = TaskService(firestore, auth);
+
+    expect((await service.loadClasses()).single.name, 'Horario anterior');
+    await service.createSchedule('legacy-class');
+    await service.renameClass('legacy-class', 'Horario actualizado');
+
+    final saved = await legacyClass.get();
+    expect(saved.data()?['has_schedule'], isTrue);
+    expect(saved.data()?['name'], 'Horario actualizado');
+    expect(
+      (await firestore.collection('classes').doc('legacy-class').get()).exists,
+      isFalse,
+    );
+  });
+
   test('creates a class schedule and moves or clears its cells', () async {
     final auth = MockFirebaseAuth(
       signedIn: true,
@@ -78,7 +110,7 @@ void main() {
     );
     final service = TaskService(FakeFirebaseFirestore(), auth);
 
-    final classId = await service.createClass('2º DAM');
+    final classId = await service.createClass('2º DAM', 'DAM2026');
     expect((await service.loadClasses()).single.hasSchedule, isFalse);
     await service.renameClass(classId, '2º DAM tarde');
     expect((await service.loadClasses()).single.name, '2º DAM tarde');
@@ -150,6 +182,177 @@ void main() {
       subjectId: null,
     );
     expect((await service.loadClasses()).single.cells, isEmpty);
+  });
+
+  test('creates a new class with a copy of an existing schedule', () async {
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'student-a', email: 'student@example.com'),
+    );
+    final service = TaskService(FakeFirebaseFirestore(), auth);
+    final originalId = await service.createClass('Horario original', 'ORIGEN');
+    await service.createSchedule(originalId);
+    final subjectId = await service.saveSubject(
+      classId: originalId,
+      name: 'Programación',
+      teacher: 'Lucía',
+      color: '#2787A0',
+    );
+    await service.setScheduleCell(
+      classId: originalId,
+      day: 'Lunes',
+      period: 0,
+      subjectId: subjectId,
+    );
+    final original = (await service.loadClasses()).single;
+
+    final copiedId = await service.createClass(
+      'Horario copiado',
+      'COPIADO',
+      scheduleTemplate: original,
+    );
+    final classes = await service.loadClasses();
+    final copied = classes.singleWhere((item) => item.id == copiedId);
+
+    expect(copied.id, isNot(original.id));
+    expect(copied.name, 'Horario copiado');
+    expect(copied.hasSchedule, isTrue);
+    expect(copied.subjects.single.name, 'Programación');
+    expect(copied.cells['Lunes_0'], subjectId);
+  });
+
+  test('deletes a class from the signed-in user collection', () async {
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'student-a', email: 'student@example.com'),
+    );
+    final service = TaskService(FakeFirebaseFirestore(), auth);
+    final classId = await service.createClass('2º DAM', 'DAM2026');
+
+    await service.deleteClass(classId);
+
+    expect(await service.loadClasses(), isEmpty);
+  });
+
+  test('joins shared schedules while keeping tasks private per user', () async {
+    final firestore = FakeFirebaseFirestore();
+    final creatorAuth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'creator', email: 'creator@example.com'),
+    );
+    final creator = TaskService(firestore, creatorAuth);
+    final classId = await creator.createClass('2º DAM', 'DAM2026');
+    await creator.createSchedule(classId);
+    final subjectId = await creator.saveSubject(
+      classId: classId,
+      name: 'Programación',
+      teacher: 'Lucía',
+      color: '#2787A0',
+    );
+    await creator.setScheduleCell(
+      classId: classId,
+      day: 'Lunes',
+      period: 0,
+      subjectId: subjectId,
+    );
+    await creator.saveTask(
+      day: 'Lunes',
+      subject: 'Programación',
+      message: 'Solo para mí',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 9, 28),
+      isExam: false,
+      scheduleId: classId,
+    );
+    await creator.saveReminder(
+      subject: 'Programación',
+      message: 'Traer el portátil',
+      scheduleId: classId,
+    );
+
+    final studentAuth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'student', email: 'student@example.com'),
+    );
+    final student = TaskService(firestore, studentAuth);
+    expect(await student.joinClass(' dam2026 '), classId);
+    final joinedClass = (await student.loadClasses()).single;
+    expect(joinedClass.name, '2º DAM');
+    expect(joinedClass.cells['Lunes_0'], subjectId);
+    expect(await student.loadTasks(), isEmpty);
+    expect(
+      (await student.loadClassMembers(classId)).map((member) => member.id),
+      containsAll(['creator', 'student']),
+    );
+    expect(
+      (await student.loadMemberTasks(classId: classId, memberId: 'creator'))
+          .single
+          .message,
+      'Solo para mí',
+    );
+    expect(
+      (await student.loadMemberReminders(classId: classId, memberId: 'creator'))
+          .single
+          .message,
+      'Traer el portátil',
+    );
+    expect(
+      await student.loadMemberReminders(
+          classId: 'another-class', memberId: 'creator'),
+      isEmpty,
+    );
+    expect(
+      await student.loadMemberTasks(
+          classId: 'another-class', memberId: 'creator'),
+      isEmpty,
+    );
+
+    await student.saveTask(
+      day: 'Martes',
+      subject: 'Programación',
+      message: 'Tarea privada',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 9, 28),
+      isExam: false,
+      scheduleId: classId,
+    );
+    expect((await creator.loadTasks()).single.message, 'Solo para mí');
+    expect((await student.loadTasks()).single.message, 'Tarea privada');
+  });
+
+  test('registers existing class members when they open the member list',
+      () async {
+    final firestore = FakeFirebaseFirestore();
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'existing-user', email: 'existing@example.com'),
+    );
+    final service = TaskService(firestore, auth);
+    final classId = await service.createClass('2º DAM', 'DAM2026');
+    await firestore
+        .collection('classes')
+        .doc(classId)
+        .collection('members')
+        .doc('existing-user')
+        .delete();
+
+    final members = await service.loadClassMembers(classId);
+
+    expect(members.map((member) => member.id), contains('existing-user'));
+  });
+
+  test('rejects duplicate class access codes', () async {
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'student-a', email: 'student@example.com'),
+    );
+    final service = TaskService(FakeFirebaseFirestore(), auth);
+    await service.createClass('2º DAM', 'DAM2026');
+
+    await expectLater(
+      service.createClass('Otra clase', 'dam2026'),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('creates and completes reminders in Firestore', () async {

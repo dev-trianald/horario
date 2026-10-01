@@ -34,12 +34,19 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ScheduleClass> _classes = [];
   List<TaskItem> _tasks = [];
   List<ReminderItem> _reminders = [];
+  List<ClassMember> _classMembers = [];
+  List<TaskItem> _memberTasks = [];
+  List<ReminderItem> _memberReminders = [];
   bool _loadingData = false;
+  bool _loadingClassMembers = false;
+  bool _loadingMemberItems = false;
   bool _showTaskHistory = false;
   bool _showReminderHistory = false;
+  bool _showClassMembers = false;
   int _tab = 0;
   int _selectedDay = (DateTime.now().weekday - 1).clamp(0, 4).toInt();
   String? _selectedClassId;
+  String? _selectedMemberId;
   bool _editingSchedule = false;
 
   ScheduleClass? get _selectedClass {
@@ -127,19 +134,54 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => const ClassEditorSheet(),
+      builder: (context) => ClassEditorSheet(
+        scheduleTemplates:
+            _classes.where((classItem) => classItem.hasSchedule).toList(),
+      ),
     );
     if (!mounted || draft == null) return;
     try {
-      final id = await _service.createClass(draft.name);
+      final scheduleTemplate = _classes
+          .where((classItem) => classItem.id == draft.scheduleTemplateId)
+          .firstOrNull;
+      final id = await _service.createClass(
+        draft.name,
+        draft.accessCode!,
+        scheduleTemplate: scheduleTemplate,
+      );
       if (!mounted) return;
       setState(() {
         _selectedClassId = id;
+        _showClassMembers = false;
         _tab = 0;
       });
       await _loadData();
     } catch (error) {
       _showMessage('No se pudo crear la clase: $error');
+    }
+  }
+
+  Future<void> _joinClass() async {
+    if (!await _ensureSignedIn('Inicia sesión para buscar una clase.')) return;
+    if (!mounted) return;
+    final accessCode = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => const AccessCodeSheet(),
+    );
+    if (!mounted || accessCode == null) return;
+    try {
+      final id = await _service.joinClass(accessCode);
+      if (!mounted) return;
+      setState(() {
+        _selectedClassId = id;
+        _showClassMembers = false;
+        _tab = 0;
+      });
+      await _loadData();
+    } catch (error) {
+      _showMessage('No se pudo acceder a la clase: $error');
     }
   }
 
@@ -281,10 +323,9 @@ class _HomeScreenState extends State<HomeScreen> {
       showDragHandle: true,
       builder: (context) => ReminderEditorSheet(
         reminder: reminder,
-        availableSubjects: _selectedClass?.subjects
-                .map((subject) => subject.name)
-                .toList() ??
-            const [],
+        availableSubjects:
+            _selectedClass?.subjects.map((subject) => subject.name).toList() ??
+                const [],
       ),
     );
     if (!mounted || draft == null) return;
@@ -292,7 +333,64 @@ class _HomeScreenState extends State<HomeScreen> {
           id: reminder?.id,
           subject: draft.subject,
           message: draft.message,
+          scheduleId: _selectedClass?.id,
         ));
+  }
+
+  Future<void> _loadClassMembers() async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    setState(() {
+      _loadingClassMembers = true;
+      _classMembers = [];
+      _selectedMemberId = null;
+      _memberTasks = [];
+      _memberReminders = [];
+    });
+    try {
+      if (classItem.accessCode.isEmpty) return;
+      final members = await _service.loadClassMembers(classItem.id);
+      if (mounted) setState(() => _classMembers = members);
+    } catch (error) {
+      _showMessage('No se pudieron cargar los usuarios de la clase: $error');
+    } finally {
+      if (mounted) setState(() => _loadingClassMembers = false);
+    }
+  }
+
+  Future<void> _openClassMembers() async {
+    setState(() {
+      _showClassMembers = true;
+      _tab = 3;
+    });
+    await _loadClassMembers();
+  }
+
+  Future<void> _selectClassMember(ClassMember member) async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    setState(() {
+      _selectedMemberId = member.id;
+      _loadingMemberItems = true;
+      _memberTasks = [];
+      _memberReminders = [];
+    });
+    try {
+      final results = await Future.wait([
+        _service.loadMemberTasks(classId: classItem.id, memberId: member.id),
+        _service.loadMemberReminders(
+            classId: classItem.id, memberId: member.id),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _memberTasks = results[0] as List<TaskItem>;
+        _memberReminders = results[1] as List<ReminderItem>;
+      });
+    } catch (error) {
+      _showMessage('No se pudieron consultar sus apuntes: $error');
+    } finally {
+      if (mounted) setState(() => _loadingMemberItems = false);
+    }
   }
 
   Future<bool> _confirmDelete(String title) async =>
@@ -320,6 +418,32 @@ class _HomeScreenState extends State<HomeScreen> {
     await _perform(() => _service.deleteTask(task.id));
   }
 
+  Future<void> _deleteClass(ScheduleClass classItem) async {
+    final shouldLeave = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('¿Salir de "${classItem.name}"?'),
+            content: const Text(
+                'La clase seguirá disponible para sus demás miembros.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Salir'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!shouldLeave) {
+      return;
+    }
+    await _perform(() => _service.deleteClass(classItem.id));
+  }
+
   Future<void> _deleteReminder(ReminderItem reminder) async {
     if (!await _confirmDelete('¿Eliminar este recordatorio?')) return;
     await _perform(() => _service.deleteReminder(reminder.id));
@@ -327,7 +451,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final titles = ['Horario', 'Tareas y exámenes', 'Recordatorios'];
+    final titles = [
+      'Horario',
+      'Tareas y exámenes',
+      'Recordatorios',
+      'Usuarios de la clase',
+    ];
     final isDesktop = MediaQuery.sizeOf(context).width >= 1100;
     final activeClass = _selectedClass;
     return Scaffold(
@@ -335,11 +464,19 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: activeClass == null
             ? null
             : IconButton(
-                tooltip: 'Volver a mis clases',
+                tooltip: _showClassMembers
+                    ? 'Volver a la clase'
+                    : 'Volver a mis clases',
                 onPressed: () => setState(() {
-                  _selectedClassId = null;
-                  _editingSchedule = false;
-                  _tab = 0;
+                  if (_showClassMembers) {
+                    _showClassMembers = false;
+                    _selectedMemberId = null;
+                    _tab = 0;
+                  } else {
+                    _selectedClassId = null;
+                    _editingSchedule = false;
+                    _tab = 0;
+                  }
                 }),
                 icon: const Icon(Icons.arrow_back),
               ),
@@ -363,11 +500,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     activeClass == null
                         ? 'Mis clases'
-                        : !activeClass.hasSchedule
-                            ? 'Configura tu horario'
-                            : isDesktop
-                                ? 'Horario · Tareas · Recordatorios'
-                                : titles[_tab],
+                        : _showClassMembers || _tab == 3
+                            ? 'Usuarios de la clase'
+                            : !activeClass.hasSchedule
+                                ? 'Configura tu horario'
+                                : isDesktop
+                                    ? 'Horario · Tareas · Recordatorios'
+                                    : titles[_tab],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -380,6 +519,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          if (activeClass != null && isDesktop)
+            IconButton(
+              tooltip: 'Usuarios de la clase',
+              onPressed: _openClassMembers,
+              icon: const Icon(Icons.groups_outlined),
+            ),
           if (activeClass != null)
             IconButton(
               tooltip: 'Editar nombre de la clase',
@@ -408,13 +553,16 @@ class _HomeScreenState extends State<HomeScreen> {
       body: activeClass == null
           ? _buildClassHome()
           : isDesktop
-              ? _buildDesktopDashboard()
+              ? _showClassMembers
+                  ? _buildClassMembers()
+                  : _buildDesktopDashboard()
               : IndexedStack(
                   index: _tab,
                   children: [
                     _buildSchedule(),
                     _buildTasks(),
                     _buildReminders(),
+                    _buildClassMembers(),
                   ],
                 ),
       floatingActionButton: activeClass != null &&
@@ -442,11 +590,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Añadir recordatorio'),
                 )
               : null,
-        bottomNavigationBar: activeClass == null || isDesktop
+      bottomNavigationBar: activeClass == null || isDesktop
           ? null
           : NavigationBar(
               selectedIndex: _tab,
-              onDestinationSelected: (index) => setState(() => _tab = index),
+              onDestinationSelected: (index) {
+                setState(() {
+                  _tab = index;
+                  _showClassMembers = index == 3;
+                });
+                if (index == 3) unawaited(_loadClassMembers());
+              },
               destinations: const [
                 NavigationDestination(
                     icon: Icon(Icons.view_week_outlined), label: 'Horario'),
@@ -454,10 +608,121 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icon(Icons.checklist), label: 'Tareas'),
                 NavigationDestination(
                     icon: Icon(Icons.bookmark_border), label: 'Recordatorios'),
+                NavigationDestination(
+                    icon: Icon(Icons.groups_outlined), label: 'Usuarios'),
               ],
             ),
     );
   }
+
+  Widget _buildClassMembers() {
+    final classItem = _selectedClass;
+    final member =
+        _classMembers.where((item) => item.id == _selectedMemberId).firstOrNull;
+    if (_loadingClassMembers) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (classItem?.accessCode.isEmpty == true) {
+      return const _EmptyState(
+        icon: Icons.groups_outlined,
+        message:
+            'Esta clase es privada y todavía no tiene una lista de usuarios.',
+      );
+    }
+    if (member != null) {
+      return _buildMemberNotes(member);
+    }
+    if (_classMembers.isEmpty) {
+      return const _EmptyState(
+        icon: Icons.groups_outlined,
+        message: 'Todavía no hay usuarios en esta clase.',
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      children: [
+        Text('Usuarios de la clase',
+            style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        for (final classMember in _classMembers) ...[
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+              title: Text(classMember.name),
+              subtitle: Text(classMember.id == _user?.uid
+                  ? 'Tú'
+                  : 'Consultar tareas y recordatorios'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _selectClassMember(classMember),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMemberNotes(ClassMember member) => ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => setState(() {
+                _selectedMemberId = null;
+                _memberTasks = [];
+                _memberReminders = [];
+              }),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Usuarios de la clase'),
+            ),
+          ),
+          Text(member.name, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 18),
+          if (_loadingMemberItems)
+            const Center(child: CircularProgressIndicator())
+          else ...[
+            Text('Tareas y exámenes',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_memberTasks.isEmpty)
+              const Text('No ha compartido tareas para esta clase.')
+            else
+              for (final task in _memberTasks)
+                Card(
+                  child: ListTile(
+                    leading: Icon(task.isExam
+                        ? Icons.fact_check_outlined
+                        : Icons.checklist),
+                    title: Text(task.subject),
+                    subtitle: Text('${task.day} · ${task.message}'),
+                    trailing: task.completed
+                        ? const Icon(Icons.done_all, size: 18)
+                        : null,
+                  ),
+                ),
+            const SizedBox(height: 20),
+            Text('Recordatorios',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (_memberReminders.isEmpty)
+              const Text('No ha compartido recordatorios para esta clase.')
+            else
+              for (final reminder in _memberReminders)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.bookmark_border),
+                    title: Text(reminder.subject),
+                    subtitle: Text(reminder.message),
+                    trailing: reminder.completed
+                        ? const Icon(Icons.done_all, size: 18)
+                        : null,
+                  ),
+                ),
+          ],
+        ],
+      );
 
   Widget _buildClassHome() => Align(
         alignment: Alignment.topCenter,
@@ -472,7 +737,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       )),
               const SizedBox(height: 6),
               Text(
-                'Crea una clase y configura su horario, asignaturas y apuntes.',
+                _user == null
+                    ? 'Inicia sesión con Google o correo para crear tus clases y sincronizar tus horarios.'
+                    : 'Crea una clase y configura su horario, asignaturas y apuntes.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -480,12 +747,29 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
               Align(
                 alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: _createClass,
-                  icon: const Icon(Icons.add),
-                  label: Text(MediaQuery.sizeOf(context).width < 600
-                      ? 'Añadir horario'
-                      : 'Crear clase'),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    if (_user == null)
+                      FilledButton.icon(
+                        onPressed: _showAccount,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Iniciar sesión'),
+                      )
+                    else ...[
+                      FilledButton.icon(
+                        onPressed: _createClass,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Crear clase'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _joinClass,
+                        icon: const Icon(Icons.search),
+                        label: const Text('Buscar una clase'),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
@@ -509,10 +793,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       leading: const _TaskDamLogo(size: 42),
                       title: Text(classItem.name,
                           style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text(classItem.hasSchedule
-                          ? '${classItem.subjects.length} asignaturas'
-                          : 'Horario sin crear'),
-                      trailing: const Icon(Icons.chevron_right),
+                      subtitle: Text(classItem.accessCode.isEmpty
+                          ? classItem.hasSchedule
+                              ? '${classItem.subjects.length} asignaturas'
+                              : 'Horario sin crear'
+                          : '${classItem.hasSchedule ? '${classItem.subjects.length} asignaturas' : 'Horario sin crear'} · Código ${classItem.accessCode}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Salir de la clase',
+                            onPressed: () => _deleteClass(classItem),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -671,12 +970,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Crear asignatura'),
                 ),
               OutlinedButton.icon(
-                onPressed: () => setState(
-                    () => _editingSchedule = !_editingSchedule),
+                onPressed: () =>
+                    setState(() => _editingSchedule = !_editingSchedule),
                 icon: Icon(_editingSchedule
                     ? Icons.check
                     : Icons.edit_calendar_outlined),
-                label: Text(_editingSchedule ? 'Terminar edición' : 'Editar horario'),
+                label: Text(
+                    _editingSchedule ? 'Terminar edición' : 'Editar horario'),
               ),
             ],
           ),
@@ -766,7 +1066,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final classItem = _selectedClass;
     if (classItem == null) return;
     if (classItem.subjects.isEmpty) {
-      _showMessage('No hay asignaturas. Crea una antes de rellenar el horario.');
+      _showMessage(
+          'No hay asignaturas. Crea una antes de rellenar el horario.');
       return;
     }
     final selected = await showModalBottomSheet<ClassSubject>(
@@ -784,7 +1085,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             for (final subject in classItem.subjects)
               ListTile(
-                leading: CircleAvatar(backgroundColor: _parseColor(subject.color)),
+                leading:
+                    CircleAvatar(backgroundColor: _parseColor(subject.color)),
                 title: Text(subject.name),
                 subtitle: Text(subject.teacher),
                 onTap: () => Navigator.pop(context, subject),
@@ -869,8 +1171,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final destinationSlots = [
       for (final day in weekdays)
         for (var period = 0; period < 6; period++)
-          if (!(day == fromDay && period == fromPeriod))
-            '${day}_$period',
+          if (!(day == fromDay && period == fromPeriod)) '${day}_$period',
     ];
     var selectedSlot = destinationSlots.first;
     final destination = await showDialog<String>(
@@ -944,12 +1245,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final classItem = _selectedClass;
     final visible = _tasks
-      .where((task) =>
-        (classItem == null ||
-          task.scheduleId == null ||
-          task.scheduleId == classItem.id) &&
-        task.completed == _showTaskHistory)
-      .toList();
+        .where((task) =>
+            (classItem == null ||
+                task.scheduleId == null ||
+                task.scheduleId == classItem.id) &&
+            task.completed == _showTaskHistory)
+        .toList();
     return Column(
       children: [
         _SectionHeader(
@@ -1056,7 +1357,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 String _colorHex(Color color) =>
-  '#${color.toARGB32().toRadixString(16).substring(2)}';
+    '#${color.toARGB32().toRadixString(16).substring(2)}';
 
 class _TaskDamLogo extends StatelessWidget {
   const _TaskDamLogo({required this.size});
@@ -1167,7 +1468,8 @@ class _EmptyScheduleCell extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             onTap: onTap,
             child: Center(
-              child: Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
+              child:
+                  Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
             ),
           ),
         ),
@@ -1239,7 +1541,7 @@ class _WeeklyClassCellState extends State<_WeeklyClassCell> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
-            transform: Matrix4.diagonal3Values(
+          transform: Matrix4.diagonal3Values(
               _hovered ? 1.04 : 1.0, _hovered ? 1.04 : 1.0, 1.0),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(

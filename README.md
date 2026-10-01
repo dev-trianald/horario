@@ -4,7 +4,7 @@ La versión web estática y la aplicación Flutter usan Firebase Authentication 
 
 ## Aplicación Flutter
 
-La app Flutter está en `lib/` y guarda tareas y recordatorios en `users/{uid}/tasks` y `users/{uid}/reminders` de Firestore. El acceso y el registro usan Firebase Authentication con correo y contraseña. Incluye horario, tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado.
+La app Flutter está en `lib/` y guarda tareas y recordatorios en `users/{uid}/tasks` y `users/{uid}/reminders` de Firestore. El acceso admite Google y correo/contraseña. Al crear una clase puedes iniciar un horario desde cero o copiar las asignaturas y franjas de otra clase. Incluye tareas/exámenes con semana seleccionable, completado e historial, y recordatorios con edición y borrado.
 
 Configuración inicial:
 
@@ -16,7 +16,7 @@ cp -an /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-pl
 ```
 
 1. Crea un proyecto en [Firebase Console](https://console.firebase.google.com/).
-2. En **Authentication > Sign-in method**, habilita **Email/Password**.
+2. En **Authentication > Sign-in method**, habilita **Email/Password** y **Google**. En Google, configura el correo de asistencia del proyecto.
 3. Crea una base de datos en **Firestore Database**.
 4. Instala y autentica Firebase CLI y FlutterFire CLI:
 
@@ -32,7 +32,7 @@ cp -an /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-pl
    flutterfire configure --project TU_PROJECT_ID --platforms web,android,ios
    ```
 
-   El comando configura los proyectos nativos y reemplaza la plantilla de opciones incluida.
+   El comando configura los proyectos nativos y reemplaza la plantilla de opciones incluida. Para Android, registra también la huella SHA-1 de la app en Firebase y vuelve a descargar la configuración nativa; para web, añade el dominio de publicación a los dominios autorizados de Authentication.
 6. Publica las reglas de seguridad de `firestore.rules`:
 
    ```sh
@@ -107,7 +107,7 @@ El código no puede cambiar el estado de publicación ni verificar el dominio po
 
 Google revisa por separado la marca y los permisos de datos. Mantén accesible la web y la política durante la revisión, y usa en la consola los mismos enlaces públicos que has desplegado.
 
-La autenticación usa correo y contraseña de Firebase Authentication. Añade el dominio publicado de la web en **Authentication > Settings > Authorized domains**.
+La autenticación usa Google o correo y contraseña de Firebase Authentication. Añade el dominio publicado de la web en **Authentication > Settings > Authorized domains**. Google debe estar habilitado en **Authentication > Sign-in method**.
 
 ## Instalarla en el móvil
 

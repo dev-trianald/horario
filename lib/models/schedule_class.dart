@@ -35,6 +35,7 @@ class ScheduleClass {
     required this.hasSchedule,
     required this.subjects,
     required this.cells,
+    this.accessCode = '',
   });
 
   final String id;
@@ -42,18 +43,20 @@ class ScheduleClass {
   final bool hasSchedule;
   final List<ClassSubject> subjects;
   final Map<String, String> cells;
+  final String accessCode;
 
   factory ScheduleClass.fromMap(Map<String, dynamic> map) => ScheduleClass(
         id: map['id'] as String,
         name: map['name'] as String,
         hasSchedule: map['has_schedule'] as bool? ?? false,
         subjects: (map['subjects'] as List<dynamic>? ?? const [])
-            .map((subject) => ClassSubject.fromMap(
-                Map<String, dynamic>.from(subject as Map)))
+            .map((subject) =>
+                ClassSubject.fromMap(Map<String, dynamic>.from(subject as Map)))
             .toList(),
         cells: (map['cells'] as Map<String, dynamic>? ?? const {}).map(
           (key, value) => MapEntry(key, value as String),
         ),
+        accessCode: map['access_code'] as String? ?? '',
       );
 
   ClassSubject? subjectById(String? subjectId) {
@@ -63,8 +66,8 @@ class ScheduleClass {
     return null;
   }
 
-  bool get isComplete => hasSchedule &&
-      weekdays.every((day) =>
-          List.generate(6, (period) => '${day}_$period')
-              .every((key) => subjectById(cells[key]) != null));
+  bool get isComplete =>
+      hasSchedule &&
+      weekdays.every((day) => List.generate(6, (period) => '${day}_$period')
+          .every((key) => subjectById(cells[key]) != null));
 }

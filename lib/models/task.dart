@@ -1,3 +1,10 @@
+class ClassMember {
+  const ClassMember({required this.id, required this.name});
+
+  final String id;
+  final String name;
+}
+
 class TaskItem {
   const TaskItem({
     required this.id,

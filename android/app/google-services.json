@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "470468226376",
+    "project_id": "horario-eba89",
+    "storage_bucket": "horario-eba89.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:470468226376:android:b5f048fb911185a445d77d",
+        "android_client_info": {
+          "package_name": "com.example.taskdam"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "470468226376-65rfobu9erp2lml5jl97lr9eip814uru.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.taskdam",
+            "certificate_hash": "263fdf7566fd0d1ec0237cc7bc74115ed6efcf7d"
+          }
+        },
+        {
+          "client_id": "470468226376-o007efsf7me1b2vrodcqb9kh3mf0tgvm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXPbOfRgpR5zxaehvNLwfOwpKPBEaozkg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "470468226376-o007efsf7me1b2vrodcqb9kh3mf0tgvm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "470468226376-af81m2i0qab1ml0kntqs0hu71scgubnp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.taskdam"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,21 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../data/schedule.dart';
 import '../models/schedule_class.dart';
 import '../models/task.dart';
 
 class ClassDraft {
-  const ClassDraft(this.name);
+  const ClassDraft(this.name, {this.scheduleTemplateId, this.accessCode});
 
   final String name;
+  final String? scheduleTemplateId;
+  final String? accessCode;
 }
 
 class ClassEditorSheet extends StatefulWidget {
-  const ClassEditorSheet({super.key, this.initialName});
+  const ClassEditorSheet({
+    super.key,
+    this.initialName,
+    this.scheduleTemplates = const [],
+  });
 
   final String? initialName;
+  final List<ScheduleClass> scheduleTemplates;
 
   @override
   State<ClassEditorSheet> createState() => _ClassEditorSheetState();
@@ -24,6 +33,8 @@ class ClassEditorSheet extends StatefulWidget {
 class _ClassEditorSheetState extends State<ClassEditorSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
+  late final TextEditingController _codeController;
+  String? _scheduleTemplateId;
 
   bool get _isEditing => widget.initialName != null;
 
@@ -31,17 +42,142 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialName ?? '');
+    _codeController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _codeController.dispose();
     super.dispose();
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    Navigator.pop(context, ClassDraft(_nameController.text.trim()));
+    Navigator.pop(
+      context,
+      ClassDraft(
+        _nameController.text.trim(),
+        scheduleTemplateId: _scheduleTemplateId,
+        accessCode: _codeController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  22, 12, 22, 24 + MediaQuery.viewInsetsOf(context).bottom),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_isEditing ? 'Editar nombre de clase' : 'Crear clase',
+                        style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 18),
+                    TextFormField(
+                      controller: _nameController,
+                      autofocus: true,
+                      maxLength: 100,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre de la clase',
+                        hintText: 'Por ejemplo, 2º DAM',
+                      ),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Escribe un nombre.'
+                              : null,
+                    ),
+                    if (!_isEditing) ...[
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _codeController,
+                        textCapitalization: TextCapitalization.characters,
+                        maxLength: 12,
+                        decoration: const InputDecoration(
+                          labelText: 'Código de acceso',
+                          hintText: 'Por ejemplo, DAM2026',
+                          helperText: 'Elige de 6 a 12 letras o números.',
+                        ),
+                        validator: (value) => value == null ||
+                                !RegExp(r'^[A-Za-z0-9]{6,12}$')
+                                    .hasMatch(value.trim())
+                            ? 'Usa entre 6 y 12 letras o números.'
+                            : null,
+                      ),
+                    ],
+                    if (!_isEditing && widget.scheduleTemplates.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: _scheduleTemplateId ?? '',
+                        decoration: const InputDecoration(
+                          labelText: 'Horario',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Crear desde cero'),
+                          ),
+                          for (final schedule in widget.scheduleTemplates)
+                            DropdownMenuItem(
+                              value: schedule.id,
+                              child: Text(schedule.name),
+                            ),
+                        ],
+                        onChanged: (value) => setState(
+                          () => _scheduleTemplateId =
+                              value?.isEmpty == true ? null : value,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _save,
+                        icon:
+                            Icon(_isEditing ? Icons.save_outlined : Icons.add),
+                        label:
+                            Text(_isEditing ? 'Guardar nombre' : 'Crear clase'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class AccessCodeSheet extends StatefulWidget {
+  const AccessCodeSheet({super.key});
+
+  @override
+  State<AccessCodeSheet> createState() => _AccessCodeSheetState();
+}
+
+class _AccessCodeSheetState extends State<AccessCodeSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _codeController = TextEditingController();
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(context, _codeController.text.trim());
   }
 
   @override
@@ -55,28 +191,30 @@ class _ClassEditorSheetState extends State<ClassEditorSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_isEditing ? 'Editar nombre de clase' : 'Crear clase',
+                Text('Buscar una clase',
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 18),
                 TextFormField(
-                  controller: _nameController,
+                  controller: _codeController,
                   autofocus: true,
-                  maxLength: 100,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 12,
                   decoration: const InputDecoration(
-                    labelText: 'Nombre de la clase',
-                    hintText: 'Por ejemplo, 2º DAM',
+                    labelText: 'Código de acceso',
                   ),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Escribe un nombre.'
+                  validator: (value) => value == null ||
+                          !RegExp(r'^[A-Za-z0-9]{6,12}$').hasMatch(value.trim())
+                      ? 'Escribe un código válido de 6 a 12 caracteres.'
                       : null,
+                  onFieldSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _save,
-                    icon: Icon(_isEditing ? Icons.save_outlined : Icons.add),
-                    label: Text(_isEditing ? 'Guardar nombre' : 'Crear clase'),
+                    onPressed: _submit,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Buscar clase'),
                   ),
                 ),
               ],
@@ -145,7 +283,8 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
   Widget build(BuildContext context) => SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
             child: Form(
@@ -279,7 +418,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
   @override
   void initState() {
     super.initState();
-    _messageController = TextEditingController(text: widget.task?.message ?? '');
+    _messageController =
+        TextEditingController(text: widget.task?.message ?? '');
     _day = widget.task?.day ?? widget.day;
     _subject = widget.task?.subject ?? widget.subject;
     _weekStart = mondayOf(widget.task?.weekStart ?? DateTime.now());
@@ -323,7 +463,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
   Widget build(BuildContext context) => SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
             child: Form(
@@ -333,8 +474,13 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    widget.task == null ? 'Nueva tarea o examen' : 'Editar apunte',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    widget.task == null
+                        ? 'Nueva tarea o examen'
+                        : 'Editar apunte',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 18),
                   Row(
@@ -343,7 +489,10 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                         child: DropdownButtonFormField<String>(
                           initialValue: _day,
                           decoration: const InputDecoration(labelText: 'Día'),
-                          items: weekdays.map((day) => DropdownMenuItem(value: day, child: Text(day))).toList(),
+                          items: weekdays
+                              .map((day) => DropdownMenuItem(
+                                  value: day, child: Text(day)))
+                              .toList(),
                           onChanged: (value) => setState(() => _day = value!),
                         ),
                       ),
@@ -351,12 +500,14 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _subject,
-                          decoration: const InputDecoration(labelText: 'Asignatura'),
-                            items: _subjectOptions
+                          decoration:
+                              const InputDecoration(labelText: 'Asignatura'),
+                          items: _subjectOptions
                               .map((subject) => DropdownMenuItem(
-                                value: subject, child: Text(subject)))
+                                  value: subject, child: Text(subject)))
                               .toList(),
-                          onChanged: (value) => setState(() => _subject = value!),
+                          onChanged: (value) =>
+                              setState(() => _subject = value!),
                         ),
                       ),
                     ],
@@ -387,7 +538,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                   OutlinedButton.icon(
                     onPressed: _selectWeek,
                     icon: const Icon(Icons.calendar_month_outlined),
-                    label: Text('Semana del ${DateFormat('dd/MM/yyyy').format(_weekStart)}'),
+                    label: Text(
+                        'Semana del ${DateFormat('dd/MM/yyyy').format(_weekStart)}'),
                   ),
                   const SizedBox(height: 18),
                   SizedBox(
@@ -426,9 +578,8 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
   late String? _subject;
 
   List<String> get _subjectOptions {
-    final options = widget.availableSubjects.isEmpty
-        ? subjects
-        : widget.availableSubjects;
+    final options =
+        widget.availableSubjects.isEmpty ? subjects : widget.availableSubjects;
     final selected = _subject;
     return selected == null || options.contains(selected)
         ? options
@@ -439,7 +590,8 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
   void initState() {
     super.initState();
     _subject = widget.reminder?.subject;
-    _messageController = TextEditingController(text: widget.reminder?.message ?? '');
+    _messageController =
+        TextEditingController(text: widget.reminder?.message ?? '');
   }
 
   @override
@@ -452,7 +604,8 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
     if (!_formKey.currentState!.validate()) return;
     Navigator.pop(
       context,
-      ReminderDraft(subject: _subject!, message: _messageController.text.trim()),
+      ReminderDraft(
+          subject: _subject!, message: _messageController.text.trim()),
     );
   }
 
@@ -460,7 +613,8 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
   Widget build(BuildContext context) => SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
             child: Form(
@@ -470,18 +624,24 @@ class _ReminderEditorSheetState extends State<ReminderEditorSheet> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    widget.reminder == null ? 'Nuevo recordatorio' : 'Editar recordatorio',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    widget.reminder == null
+                        ? 'Nuevo recordatorio'
+                        : 'Editar recordatorio',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     initialValue: _subject,
                     decoration: const InputDecoration(labelText: 'Asignatura'),
                     items: _subjectOptions
-                      .map((subject) => DropdownMenuItem(
-                        value: subject, child: Text(subject)))
-                      .toList(),
-                    validator: (value) => value == null ? 'Selecciona una asignatura.' : null,
+                        .map((subject) => DropdownMenuItem(
+                            value: subject, child: Text(subject)))
+                        .toList(),
+                    validator: (value) =>
+                        value == null ? 'Selecciona una asignatura.' : null,
                     onChanged: (value) => setState(() => _subject = value),
                   ),
                   const SizedBox(height: 14),
@@ -563,7 +723,52 @@ class _AuthSheetState extends State<AuthSheet> {
       if (mounted) setState(() => _feedback = _authErrorMessage(error));
     } catch (_) {
       if (mounted) {
-        setState(() => _feedback = 'No se pudo conectar con Firebase. Comprueba la conexión e inténtalo de nuevo.');
+        setState(() => _feedback =
+            'No se pudo conectar con Firebase. Comprueba la conexión e inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _submitting = true;
+      _feedback = null;
+    });
+    try {
+      final provider = GoogleAuthProvider()
+        ..addScope('https://www.googleapis.com/auth/spreadsheets');
+      if (kIsWeb) {
+        await widget.auth.signInWithPopup(provider);
+      } else {
+        final googleSignIn = GoogleSignIn(
+          scopes: [
+            'email',
+            'https://www.googleapis.com/auth/spreadsheets',
+          ],
+        );
+        final account = await googleSignIn.signIn();
+        if (account == null) return;
+        final authentication = await account.authentication;
+        final idToken = authentication.idToken;
+        if (idToken == null) {
+          throw StateError('Google no devolvió un token de acceso.');
+        }
+        await widget.auth.signInWithCredential(
+          GoogleAuthProvider.credential(
+            idToken: idToken,
+            accessToken: authentication.accessToken,
+          ),
+        );
+      }
+      if (mounted) Navigator.pop(context);
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _feedback = _authErrorMessage(error));
+    } catch (error) {
+      if (mounted) {
+        setState(() => _feedback =
+            'No se pudo iniciar sesión con Google. Comprueba la configuración del proveedor e inténtalo de nuevo.');
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -574,7 +779,8 @@ class _AuthSheetState extends State<AuthSheet> {
   Widget build(BuildContext context) => SafeArea(
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 180),
-          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 24),
             child: Form(
@@ -585,14 +791,29 @@ class _AuthSheetState extends State<AuthSheet> {
                 children: [
                   Text(
                     _createAccount ? 'Crear cuenta' : 'Iniciar sesión',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _submitting ? null : _signInWithGoogle,
+                      icon: const Icon(Icons.g_mobiledata, size: 26),
+                      label: const Text('Continuar con Google'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Center(child: Text('o con correo electrónico')),
+                  const SizedBox(height: 10),
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(labelText: 'Correo electrónico'),
+                    decoration:
+                        const InputDecoration(labelText: 'Correo electrónico'),
                     validator: (value) => value == null || !value.contains('@')
                         ? 'Introduce un correo válido.'
                         : null,
@@ -609,7 +830,9 @@ class _AuthSheetState extends State<AuthSheet> {
                   ),
                   if (_feedback != null) ...[
                     const SizedBox(height: 12),
-                    Text(_feedback!, style: TextStyle(color: Theme.of(context).colorScheme.tertiary)),
+                    Text(_feedback!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.tertiary)),
                   ],
                   const SizedBox(height: 16),
                   SizedBox(
@@ -617,8 +840,12 @@ class _AuthSheetState extends State<AuthSheet> {
                     child: FilledButton(
                       onPressed: _submitting ? null : _submit,
                       child: _submitting
-                          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(_createAccount ? 'Crear cuenta' : 'Iniciar sesión'),
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Text(_createAccount
+                              ? 'Crear cuenta'
+                              : 'Iniciar sesión'),
                     ),
                   ),
                   Align(
@@ -630,7 +857,9 @@ class _AuthSheetState extends State<AuthSheet> {
                                 _createAccount = !_createAccount;
                                 _feedback = null;
                               }),
-                      child: Text(_createAccount ? 'Ya tengo una cuenta' : 'Crear una cuenta nueva'),
+                      child: Text(_createAccount
+                          ? 'Ya tengo una cuenta'
+                          : 'Crear una cuenta nueva'),
                     ),
                   ),
                 ],
@@ -645,10 +874,14 @@ String _authErrorMessage(FirebaseAuthException error) => switch (error.code) {
       'email-already-in-use' => 'Ya existe una cuenta con ese correo.',
       'invalid-email' => 'El correo no tiene un formato válido.',
       'weak-password' => 'La contraseña es demasiado débil.',
-      'user-not-found' || 'wrong-password' || 'invalid-credential' =>
+      'user-not-found' ||
+      'wrong-password' ||
+      'invalid-credential' =>
         'El correo o la contraseña no son correctos.',
       'user-disabled' => 'Esta cuenta está desactivada.',
-      'too-many-requests' => 'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
-      'network-request-failed' => 'No hay conexión con Firebase. Comprueba la configuración y tu conexión a Internet.',
+      'too-many-requests' =>
+        'Demasiados intentos. Espera un momento e inténtalo de nuevo.',
+      'network-request-failed' =>
+        'No hay conexión con Firebase. Comprueba la configuración y tu conexión a Internet.',
       _ => error.message ?? 'No se pudo iniciar sesión.',
     };
