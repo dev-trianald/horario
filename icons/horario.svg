@@ -29,7 +29,7 @@
   </defs>
 
   <!-- Fondo cuadrado completo de 512x512 para rellenar todo el icono maskable -->
-  <rect width="512" height="512" fill="url(#bgGrad)"/>
+  <!-- <rect width="512" height="512" fill="url(#bgGrad)"/> -->
 
   <!-- Tarjeta central ajustada a la zona segura de Android -->
   <g filter="url(#shadow)">
