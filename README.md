@@ -138,3 +138,5 @@ flutter install
 ```
 
 El APK se genera en `build/app/outputs/flutter-apk/app-release.apk`. Publicar Flutter Web no actualiza un APK ya instalado: compílalo de nuevo para distribuir los cambios Android.
+
+En cada push a la rama `Restaurar2`, GitHub Actions compila el APK y lo publica como artefacto descargable durante 90 días. Para descargarlo desde otro equipo, abre **Actions > Build Android APK**, selecciona la ejecución más reciente que haya terminado correctamente y descarga `taskdam-android-apk`.
