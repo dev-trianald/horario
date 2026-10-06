@@ -918,6 +918,8 @@ class _AuthSheetState extends State<AuthSheet> {
       } else {
         final googleSignIn = GoogleSignIn(
           scopes: ['email'],
+          serverClientId:
+              '470468226376-o007efsf7me1b2vrodcqb9kh3mf0tgvm.apps.googleusercontent.com',
         );
         final account = await googleSignIn.signIn();
         if (account == null) return;
