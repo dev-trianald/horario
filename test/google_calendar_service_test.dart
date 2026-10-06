@@ -1,43 +1,52 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:taskdam/models/task.dart';
 import 'package:taskdam/services/google_calendar_service.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
-  test('Firebase sign-out pause does not clear the Calendar preference',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'google_calendar_keep_connected': true,
-    });
+  test('Calendar starts disconnected and Firebase sign-out clears its session',
+      () {
     final service = GoogleCalendarService();
+
+    expect(service.isConnected, isFalse);
+    expect(service.connectedEmail, isNull);
 
     service.pauseForFirebaseSignOut();
 
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getBool('google_calendar_keep_connected'), isTrue);
+    expect(service.isConnected, isFalse);
+    expect(service.connectedEmail, isNull);
   });
 
-  test('explicit Calendar disconnect clears the remembered preference',
-      () async {
-    SharedPreferences.setMockInitialValues({
-      'google_calendar_keep_connected': true,
-    });
+  test('disconnect is safe when Calendar is not connected', () async {
     final service = GoogleCalendarService();
 
     await service.disconnect();
 
-    final preferences = await SharedPreferences.getInstance();
-    expect(preferences.getBool('google_calendar_keep_connected'), isNull);
-    expect(service.shouldStayConnected, isFalse);
+    expect(service.isConnected, isFalse);
+    expect(service.connectedEmail, isNull);
   });
 
-  test('restore remains disabled until Calendar was explicitly connected',
-      () async {
-    SharedPreferences.setMockInitialValues({});
+  test('sync requires a Calendar session', () {
     final service = GoogleCalendarService();
+    final task = TaskItem(
+      id: 'task-1',
+      day: 'Lunes',
+      subject: 'Matemáticas',
+      message: 'Repasar',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 10, 5),
+      isExam: false,
+      completed: false,
+    );
 
-    expect(await service.restore('student@example.com'), isFalse);
-    expect(service.shouldStayConnected, isFalse);
+    expect(
+      service.syncTask(task, update: false),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'Conecta Google Calendar primero.',
+        ),
+      ),
+    );
   });
 }
