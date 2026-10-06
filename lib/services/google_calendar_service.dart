@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task.dart';
 
@@ -11,18 +10,14 @@ class GoogleCalendarService {
 
   static const _calendarScope =
       'https://www.googleapis.com/auth/calendar.events';
-  static const _keepConnectedKey = 'google_calendar_keep_connected';
 
   final http.Client _client;
   GoogleSignIn? _googleSignIn;
   GoogleSignInAccount? _account;
   String? _accessToken;
   String? _email;
-  bool _shouldStayConnected = false;
-  Future<bool>? _restoreFuture;
 
   bool get isConnected => _accessToken != null;
-  bool get shouldStayConnected => _shouldStayConnected;
   String? get connectedEmail => _email;
 
   GoogleSignIn get _signIn => _googleSignIn ??= GoogleSignIn(
@@ -36,26 +31,7 @@ class GoogleCalendarService {
     final connectedEmail = await _activateAccount(account, firebaseEmail);
     if (connectedEmail == null) return null;
 
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_keepConnectedKey, true);
-    _shouldStayConnected = true;
     return connectedEmail;
-  }
-
-  Future<bool> restore(String firebaseEmail) {
-    return _restoreFuture ??= _restore(firebaseEmail).whenComplete(() {
-      _restoreFuture = null;
-    });
-  }
-
-  Future<bool> _restore(String firebaseEmail) async {
-    final preferences = await SharedPreferences.getInstance();
-    _shouldStayConnected = preferences.getBool(_keepConnectedKey) ?? false;
-    if (!_shouldStayConnected) return false;
-
-    final account = await _signIn.signInSilently();
-    if (account == null) return false;
-    return await _activateAccount(account, firebaseEmail) != null;
   }
 
   Future<String?> _activateAccount(
@@ -80,9 +56,6 @@ class GoogleCalendarService {
   }
 
   Future<void> disconnect() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.remove(_keepConnectedKey);
-    _shouldStayConnected = false;
     if (_account != null) await _signIn.disconnect();
     _clearSession();
   }

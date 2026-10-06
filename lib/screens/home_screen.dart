@@ -39,6 +39,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ClassMember> _classMembers = [];
   List<TaskItem> _memberTasks = [];
   List<ReminderItem> _memberReminders = [];
+  final Set<String> _addingMemberItems = {};
+  final Set<String> _addedMemberItems = {};
   bool _loadingData = false;
   bool _loadingClassMembers = false;
   bool _loadingMemberItems = false;
@@ -76,10 +78,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _reminders = [];
         });
       } else {
-        unawaited(_loadDataAndRestoreCalendar());
+        unawaited(_loadData());
       }
     });
-    if (_user != null) unawaited(_loadDataAndRestoreCalendar());
+    if (_user != null) unawaited(_loadData());
   }
 
   @override
@@ -111,29 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _showMessage('No se pudieron cargar tus datos: $error');
     } finally {
       if (mounted) setState(() => _loadingData = false);
-    }
-  }
-
-  Future<void> _loadDataAndRestoreCalendar() async {
-    final signedInUser = _user;
-    if (signedInUser == null) return;
-    await _loadData();
-    if (!mounted || _user?.uid != signedInUser.uid) return;
-
-    final email = signedInUser.email;
-    if (email == null) return;
-    setState(() => _calendarBusy = true);
-    try {
-      final restored = await _calendarService.restore(email);
-      if (!restored || !mounted || _user?.uid != signedInUser.uid) return;
-      for (final task in _tasks) {
-        await _calendarService.syncTask(task, update: true);
-      }
-      if (mounted) setState(() {});
-    } catch (error) {
-      _showMessage('No se pudo reconectar Google Calendar: $error');
-    } finally {
-      if (mounted) setState(() => _calendarBusy = false);
     }
   }
 
@@ -255,6 +234,76 @@ class _HomeScreenState extends State<HomeScreen> {
         ));
   }
 
+  Future<void> _editSubjects() async {
+    final classItem = _selectedClass;
+    if (classItem == null || classItem.subjects.isEmpty) return;
+    if (!await _ensureSignedIn('Inicia sesión para editar asignaturas.')) {
+      return;
+    }
+    if (!mounted) return;
+    final subject = await showModalBottomSheet<ClassSubject>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: 16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+              child: Text('Editar asignaturas',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            for (final item in classItem.subjects)
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: _parseColor(item.color),
+                ),
+                title: Text(item.name),
+                subtitle: Text(item.teacher),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => Navigator.pop(context, item),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || subject == null) return;
+    final draft = await showModalBottomSheet<SubjectDraft>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SubjectEditorSheet(subject: subject),
+    );
+    if (!mounted || draft == null) return;
+    await _perform(() => _service.updateSubject(
+          classId: classItem.id,
+          subjectId: subject.id,
+          name: draft.name,
+          teacher: draft.teacher,
+          color: _colorHex(draft.color),
+        ));
+  }
+
+  Future<void> _editScheduleTimes() async {
+    final classItem = _selectedClass;
+    if (classItem == null) return;
+    if (!await _ensureSignedIn('Inicia sesión para editar las horas.')) return;
+    if (!mounted) return;
+    final times = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) =>
+          ScheduleTimesEditorSheet(initialTimes: classItem.times),
+    );
+    if (!mounted || times == null) return;
+    await _perform(() => _service.updateScheduleTimes(
+          classId: classItem.id,
+          times: times,
+        ));
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -295,9 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'Conectando Calendar…'
                         : _calendarService.isConnected
                           ? 'Desconectar Google Calendar'
-                            : _calendarService.shouldStayConnected
-                              ? 'Reconectar Google Calendar'
-                              : 'Conectar Google Calendar'),
+                          : 'Conectar Google Calendar'),
                     ),
                     const SizedBox(height: 12),
                     FilledButton.tonalIcon(
@@ -470,6 +517,89 @@ class _HomeScreenState extends State<HomeScreen> {
       _showMessage('No se pudieron consultar sus apuntes: $error');
     } finally {
       if (mounted) setState(() => _loadingMemberItems = false);
+    }
+  }
+
+  String _memberItemKey(String type, String id) =>
+      '${_selectedClassId ?? ''}:${_selectedMemberId ?? ''}:$type:$id';
+
+  Future<void> _addMemberTaskToSchedule(TaskItem task) async {
+    final classItem = _selectedClass;
+    final currentUser = _user;
+    final memberId = _selectedMemberId;
+    if (classItem == null ||
+        currentUser == null ||
+        memberId == null ||
+        memberId == currentUser.uid) {
+      return;
+    }
+
+    final key = _memberItemKey('task', task.id);
+    if (_addingMemberItems.contains(key) || _addedMemberItems.contains(key)) {
+      return;
+    }
+    setState(() => _addingMemberItems.add(key));
+    String? savedTaskId;
+    try {
+      final subject = classItem.subjects
+          .where((item) => item.name == task.subject)
+          .firstOrNull;
+      await _perform(() async {
+        savedTaskId = await _service.saveTask(
+          day: task.day,
+          subject: task.subject,
+          message: task.message,
+          color: subject?.color ?? task.color,
+          weekStart: task.weekStart,
+          isExam: task.isExam,
+          scheduleId: classItem.id,
+        );
+      });
+      if (savedTaskId == null || !mounted) return;
+      setState(() => _addedMemberItems.add(key));
+      if (_calendarService.isConnected) {
+        try {
+          final savedTask = _tasks.firstWhere((item) => item.id == savedTaskId);
+          await _calendarService.syncTask(savedTask, update: false);
+        } catch (error) {
+          _showMessage(
+              'La tarea se agregó al horario, pero Google Calendar no se actualizó: $error');
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _addingMemberItems.remove(key));
+    }
+  }
+
+  Future<void> _addMemberReminderToSchedule(ReminderItem reminder) async {
+    final classItem = _selectedClass;
+    final currentUser = _user;
+    final memberId = _selectedMemberId;
+    if (classItem == null ||
+        currentUser == null ||
+        memberId == null ||
+        memberId == currentUser.uid) {
+      return;
+    }
+
+    final key = _memberItemKey('reminder', reminder.id);
+    if (_addingMemberItems.contains(key) || _addedMemberItems.contains(key)) {
+      return;
+    }
+    setState(() => _addingMemberItems.add(key));
+    var saved = false;
+    try {
+      await _perform(() async {
+        await _service.saveReminder(
+          subject: reminder.subject,
+          message: reminder.message,
+          scheduleId: classItem.id,
+        );
+        saved = true;
+      });
+      if (saved && mounted) setState(() => _addedMemberItems.add(key));
+    } finally {
+      if (mounted) setState(() => _addingMemberItems.remove(key));
     }
   }
 
@@ -774,19 +904,30 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_memberTasks.isEmpty)
               const Text('No ha compartido tareas para esta clase.')
             else
-              for (final task in _memberTasks)
+              for (final task in _memberTasks) ...[
                 Card(
                   child: ListTile(
                     leading: Icon(task.isExam
                         ? Icons.fact_check_outlined
                         : Icons.checklist),
                     title: Text(task.subject),
-                    subtitle: Text('${task.day} · ${task.message}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${task.day} · ${task.message}'),
+                        if (member.id != _user?.uid)
+                          _memberItemButton(
+                            key: _memberItemKey('task', task.id),
+                            onPressed: () => _addMemberTaskToSchedule(task),
+                          ),
+                      ],
+                    ),
                     trailing: task.completed
                         ? const Icon(Icons.done_all, size: 18)
                         : null,
                   ),
                 ),
+              ],
             const SizedBox(height: 20),
             Text('Recordatorios',
                 style: Theme.of(context).textTheme.titleMedium),
@@ -794,20 +935,58 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_memberReminders.isEmpty)
               const Text('No ha compartido recordatorios para esta clase.')
             else
-              for (final reminder in _memberReminders)
+              for (final reminder in _memberReminders) ...[
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.bookmark_border),
                     title: Text(reminder.subject),
-                    subtitle: Text(reminder.message),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(reminder.message),
+                        if (member.id != _user?.uid)
+                          _memberItemButton(
+                            key: _memberItemKey('reminder', reminder.id),
+                            onPressed: () =>
+                                _addMemberReminderToSchedule(reminder),
+                          ),
+                      ],
+                    ),
                     trailing: reminder.completed
                         ? const Icon(Icons.done_all, size: 18)
                         : null,
                   ),
                 ),
+              ],
           ],
         ],
       );
+
+  Widget _memberItemButton({
+    required String key,
+    required VoidCallback onPressed,
+  }) {
+    final adding = _addingMemberItems.contains(key);
+    final added = _addedMemberItems.contains(key);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: adding || added ? null : onPressed,
+        icon: adding
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(added ? Icons.check : Icons.add),
+        label: Text(adding
+            ? 'Agregando…'
+            : added
+                ? 'Agregado a tu horario'
+                : 'Agregar a tu horario'),
+      ),
+    );
+  }
 
   Widget _buildClassHome() => Align(
         alignment: Alignment.topCenter,
@@ -1009,7 +1188,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                               BorderRadius.circular(6),
                                         ),
                                         child: Text(
-                                          classTimes[row < 3 ? row : row - 1],
+                                          classItem.times[row < 3
+                                              ? row
+                                              : row - 1],
                                           textAlign: TextAlign.center,
                                           style: Theme.of(context)
                                               .textTheme
@@ -1054,6 +1235,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Crear asignatura'),
                 ),
+              if (classItem.subjects.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: _editSubjects,
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: const Text('Editar asignaturas'),
+                ),
               OutlinedButton.icon(
                 onPressed: () =>
                     setState(() => _editingSchedule = !_editingSchedule),
@@ -1062,6 +1249,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     : Icons.edit_calendar_outlined),
                 label: Text(
                     _editingSchedule ? 'Terminar edición' : 'Editar horario'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _editScheduleTimes,
+                icon: const Icon(Icons.schedule_outlined, size: 18),
+                label: const Text('Editar horas'),
               ),
             ],
           ),
@@ -1135,12 +1327,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (subject == null) {
       return _EmptyScheduleRow(
         key: ValueKey('schedule-cell-$day-$period'),
-        time: classTimes[period],
+        time: classItem.times[period],
         onTap: () => _assignScheduleCell(day, period),
       );
     }
     return _ClassRow(
-      time: classTimes[period],
+      time: classItem.times[period],
       subject: subject,
       onTap: () => _tapScheduleCell(day, period, subject),
       editing: _editingSchedule,
@@ -1318,7 +1510,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final day = slot.substring(0, separator);
     final period = int.parse(slot.substring(separator + 1));
     final target = classItem.subjectById(classItem.cells[slot]);
-    return '$day · ${classTimes[period]} · ${target?.name ?? 'Vacía'}';
+    return '$day · ${classItem.times[period]} · ${target?.name ?? 'Vacía'}';
   }
 
   Widget _buildTasks({bool desktop = false}) {

@@ -39,12 +39,18 @@ class TaskService {
     final classes = await Future.wait(memberships.docs.map((membership) async {
       final document =
           await _firestore.collection('classes').doc(membership.id).get();
+      final membershipData = membership.data();
       if (!document.exists) {
-        final legacyData = membership.data();
-        if (!legacyData.containsKey('name')) return null;
-        return ScheduleClass.fromMap({...legacyData, 'id': membership.id});
+        if (!membershipData.containsKey('name')) return null;
+        return ScheduleClass.fromMap({...membershipData, 'id': membership.id});
       }
-      return ScheduleClass.fromMap({...document.data()!, 'id': document.id});
+      final classData = Map<String, dynamic>.from(document.data()!);
+      for (final field in ['has_schedule', 'subjects', 'cells', 'times']) {
+        if (membershipData.containsKey(field)) {
+          classData[field] = membershipData[field];
+        }
+      }
+      return ScheduleClass.fromMap({...classData, 'id': document.id});
     }));
     return classes.whereType<ScheduleClass>().toList();
   }
@@ -76,6 +82,7 @@ class TaskService {
                 .toList() ??
             <Map<String, dynamic>>[],
         'cells': scheduleTemplate?.cells ?? <String, String>{},
+        'times': scheduleTemplate?.times ?? classTimes,
         'created_at': FieldValue.serverTimestamp(),
       });
       transaction.set(codeDocument, {
@@ -150,8 +157,7 @@ class TaskService {
   Future<void> _ensureClassMember(String classId) async {
     final membership = await _userCollection('classes').doc(classId).get();
     if (membership.data()?['access_code'] is! String) return;
-    final ownMember =
-        _sharedClass(classId).collection('members').doc(_userId);
+    final ownMember = _sharedClass(classId).collection('members').doc(_userId);
     if ((await ownMember.get()).exists) return;
     await ownMember.set({
       'display_name': _memberName,
@@ -196,8 +202,35 @@ class TaskService {
   }
 
   Future<void> createSchedule(String classId) async {
-    await (await _classDocument(classId)).update({
-      'has_schedule': true,
+    final classItem = await _loadScheduleClass(classId);
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: true,
+      subjects: classItem.subjects,
+      cells: classItem.cells,
+      times: classItem.times,
+    );
+  }
+
+  Future<ScheduleClass> _loadScheduleClass(String classId) async {
+    for (final classItem in await loadClasses()) {
+      if (classItem.id == classId) return classItem;
+    }
+    throw StateError('No se ha encontrado la clase seleccionada.');
+  }
+
+  Future<void> _savePersonalSchedule(
+    String classId, {
+    required bool hasSchedule,
+    required List<ClassSubject> subjects,
+    required Map<String, String> cells,
+    required List<String> times,
+  }) async {
+    await _userCollection('classes').doc(classId).update({
+      'has_schedule': hasSchedule,
+      'subjects': subjects.map((subject) => subject.toMap()).toList(),
+      'cells': cells,
+      'times': times,
     });
   }
 
@@ -222,24 +255,58 @@ class TaskService {
     required String teacher,
     required String color,
   }) async {
-    final classDocument = await _classDocument(classId);
-    final subjectId = classDocument
-        .collection(
-          'subjectIds',
-        )
+    final classItem = await _loadScheduleClass(classId);
+    final subjectId = _userCollection('classes')
+        .doc(classId)
+        .collection('subjectIds')
         .doc()
         .id;
-    await classDocument.update({
-      'subjects': FieldValue.arrayUnion([
-        {
-          'id': subjectId,
-          'name': name,
-          'teacher': teacher,
-          'color': color,
-        }
-      ]),
-    });
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: classItem.hasSchedule,
+      subjects: [
+        ...classItem.subjects,
+        ClassSubject(
+          id: subjectId,
+          name: name,
+          teacher: teacher,
+          color: color,
+        ),
+      ],
+      cells: classItem.cells,
+      times: classItem.times,
+    );
     return subjectId;
+  }
+
+  Future<void> updateSubject({
+    required String classId,
+    required String subjectId,
+    required String name,
+    required String teacher,
+    required String color,
+  }) async {
+    final classItem = await _loadScheduleClass(classId);
+    if (!classItem.subjects.any((subject) => subject.id == subjectId)) {
+      throw StateError('No se ha encontrado la asignatura.');
+    }
+    final subjects = classItem.subjects
+        .map((subject) => subject.id == subjectId
+            ? ClassSubject(
+                id: subject.id,
+                name: name,
+                teacher: teacher,
+                color: color,
+              )
+            : subject)
+        .toList();
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: classItem.hasSchedule,
+      subjects: subjects,
+      cells: classItem.cells,
+      times: classItem.times,
+    );
   }
 
   Future<void> setScheduleCell({
@@ -248,9 +315,21 @@ class TaskService {
     required int period,
     required String? subjectId,
   }) async {
-    await (await _classDocument(classId)).update({
-      'cells.${day}_$period': subjectId ?? FieldValue.delete(),
-    });
+    final classItem = await _loadScheduleClass(classId);
+    final cells = Map<String, String>.from(classItem.cells);
+    final key = '${day}_$period';
+    if (subjectId == null) {
+      cells.remove(key);
+    } else {
+      cells[key] = subjectId;
+    }
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: classItem.hasSchedule,
+      subjects: classItem.subjects,
+      cells: cells,
+      times: classItem.times,
+    );
   }
 
   Future<void> moveScheduleCell({
@@ -262,11 +341,40 @@ class TaskService {
     required String subjectId,
     required String? destinationSubjectId,
   }) async {
-    await (await _classDocument(classId)).update({
-      'cells.${fromDay}_$fromPeriod':
-          destinationSubjectId ?? FieldValue.delete(),
-      'cells.${toDay}_$toPeriod': subjectId,
-    });
+    final classItem = await _loadScheduleClass(classId);
+    final cells = Map<String, String>.from(classItem.cells);
+    final fromKey = '${fromDay}_$fromPeriod';
+    final toKey = '${toDay}_$toPeriod';
+    if (destinationSubjectId == null) {
+      cells.remove(fromKey);
+    } else {
+      cells[fromKey] = destinationSubjectId;
+    }
+    cells[toKey] = subjectId;
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: classItem.hasSchedule,
+      subjects: classItem.subjects,
+      cells: cells,
+      times: classItem.times,
+    );
+  }
+
+  Future<void> updateScheduleTimes({
+    required String classId,
+    required List<String> times,
+  }) async {
+    if (times.length != classTimes.length) {
+      throw ArgumentError('El horario debe tener ${classTimes.length} tramos.');
+    }
+    final classItem = await _loadScheduleClass(classId);
+    await _savePersonalSchedule(
+      classId,
+      hasSchedule: classItem.hasSchedule,
+      subjects: classItem.subjects,
+      cells: classItem.cells,
+      times: times,
+    );
   }
 
   Future<List<TaskItem>> loadTasks() async {

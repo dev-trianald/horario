@@ -237,7 +237,9 @@ class SubjectDraft {
 }
 
 class SubjectEditorSheet extends StatefulWidget {
-  const SubjectEditorSheet({super.key});
+  const SubjectEditorSheet({super.key, this.subject});
+
+  final ClassSubject? subject;
 
   @override
   State<SubjectEditorSheet> createState() => _SubjectEditorSheetState();
@@ -256,9 +258,27 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
   ];
 
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _teacherController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _teacherController;
   Color _color = _colors.first;
+
+  @override
+  void initState() {
+    super.initState();
+    final subject = widget.subject;
+    _nameController = TextEditingController(text: subject?.name ?? '');
+    _teacherController = TextEditingController(text: subject?.teacher ?? '');
+    if (subject != null) {
+      _color = _parseSubjectColor(subject.color) ?? _colors.first;
+    }
+  }
+
+  Color? _parseSubjectColor(String value) {
+    final normalized = value.replaceFirst('#', '');
+    final parsed = int.tryParse(normalized, radix: 16);
+    if (parsed == null) return null;
+    return Color(normalized.length == 6 ? 0xFF000000 | parsed : parsed);
+  }
 
   @override
   void dispose() {
@@ -293,12 +313,15 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Crear asignatura',
+                  Text(
+                      widget.subject == null
+                          ? 'Crear asignatura'
+                          : 'Editar asignatura',
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 18),
                   TextFormField(
                     controller: _nameController,
-                    autofocus: true,
+                    autofocus: widget.subject == null,
                     maxLength: 60,
                     decoration: const InputDecoration(labelText: 'Nombre'),
                     validator: (value) => value == null || value.trim().isEmpty
@@ -323,6 +346,8 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
                     children: [
                       for (final color in _colors)
                         InkWell(
+                          key: ValueKey(
+                              'subject-color-${color.toARGB32().toRadixString(16)}'),
                           onTap: () => setState(() => _color = color),
                           customBorder: const CircleBorder(),
                           child: Container(
@@ -340,6 +365,16 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
                             ),
                           ),
                         ),
+                      if (!_colors.contains(_color))
+                        Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: _color,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 3),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 22),
@@ -347,8 +382,148 @@ class _SubjectEditorSheetState extends State<SubjectEditorSheet> {
                     width: double.infinity,
                     child: FilledButton.icon(
                       onPressed: _save,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Añadir asignatura'),
+                      icon: Icon(widget.subject == null
+                          ? Icons.add
+                          : Icons.save_outlined),
+                      label: Text(widget.subject == null
+                          ? 'Añadir asignatura'
+                          : 'Guardar cambios'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
+class ScheduleTimesEditorSheet extends StatefulWidget {
+  const ScheduleTimesEditorSheet({super.key, required this.initialTimes});
+
+  final List<String> initialTimes;
+
+  @override
+  State<ScheduleTimesEditorSheet> createState() =>
+      _ScheduleTimesEditorSheetState();
+}
+
+class _ScheduleTimesEditorSheetState extends State<ScheduleTimesEditorSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final List<TextEditingController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers = widget.initialTimes
+        .expand((time) => time.split(' - '))
+        .map((time) => TextEditingController(text: time))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  int? _minutes(String value) {
+    if (!RegExp(r'^\d{1,2}:\d{2}$').hasMatch(value)) return null;
+    final parts = value.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    if (hour > 23 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
+  String? _validateTime(String? value) =>
+      _minutes(value ?? '') == null ? 'Usa el formato H:mm o HH:mm.' : null;
+
+  String _formatTime(String value) {
+    final parts = value.split(':');
+    return '${parts[0].padLeft(2, '0')}:${parts[1]}';
+  }
+
+  String? _validateEnd(int startIndex, String? value) {
+    final formatError = _validateTime(value);
+    if (formatError != null) return formatError;
+    final start = _minutes(_controllers[startIndex].text);
+    final end = _minutes(value!);
+    if (start != null && end! <= start) {
+      return 'Debe ser posterior al inicio.';
+    }
+    return null;
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    Navigator.pop(
+      context,
+      List.generate(
+        _controllers.length ~/ 2,
+        (index) => '${_formatTime(_controllers[index * 2].text)} - '
+            '${_formatTime(_controllers[index * 2 + 1].text)}',
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Editar horas del horario',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 16),
+                  for (var index = 0; index < _controllers.length; index += 2)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _controllers[index],
+                              keyboardType: TextInputType.datetime,
+                              decoration: InputDecoration(
+                                labelText: 'Hora de inicio · ${index ~/ 2 + 1}',
+                                hintText: '08:15',
+                              ),
+                              validator: _validateTime,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _controllers[index + 1],
+                              keyboardType: TextInputType.datetime,
+                              decoration: const InputDecoration(
+                                labelText: 'Hora de fin',
+                                hintText: '09:15',
+                              ),
+                              validator: (value) => _validateEnd(index, value),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _save,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('Guardar horas'),
                     ),
                   ),
                 ],

@@ -59,7 +59,8 @@ service cloud.firestore {
           'name', 'access_code', 'owner_id', 'has_schedule', 'subjects', 'cells', 'created_at'
         ])
         && data.keys().hasOnly([
-          'name', 'access_code', 'owner_id', 'has_schedule', 'subjects', 'cells', 'created_at'
+          'name', 'access_code', 'owner_id', 'has_schedule', 'subjects',
+          'cells', 'times', 'created_at'
         ])
         && data.name is string
         && data.name.size() > 0
@@ -70,6 +71,7 @@ service cloud.firestore {
         && data.has_schedule is bool
         && data.subjects is list
         && data.cells is map
+        && (!data.keys().hasAny(['times']) || data.times is list)
         && data.created_at is timestamp
         && getAfter(/databases/$(database)/documents/class_codes/$(data.access_code)).data.class_id == classId;
     }
@@ -80,7 +82,7 @@ service cloud.firestore {
           'name', 'has_schedule', 'subjects', 'cells', 'created_at'
         ])
         && data.keys().hasOnly([
-          'name', 'has_schedule', 'subjects', 'cells', 'created_at'
+          'name', 'has_schedule', 'subjects', 'cells', 'times', 'created_at'
         ])
         && data.name is string
         && data.name.size() > 0
@@ -88,7 +90,26 @@ service cloud.firestore {
         && data.has_schedule is bool
         && data.subjects is list
         && data.cells is map
+        && (!data.keys().hasAny(['times']) || data.times is list)
         && data.created_at is timestamp;
+    }
+
+    function validMemberSchedule() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'access_code', 'created_at', 'has_schedule', 'subjects', 'cells'
+        ])
+        && data.keys().hasOnly([
+          'access_code', 'created_at', 'has_schedule', 'subjects', 'cells',
+          'times'
+        ])
+        && data.access_code is string
+        && data.access_code.matches('^[A-Z0-9]{6,12}$')
+        && data.created_at is timestamp
+        && data.has_schedule is bool
+        && data.subjects is list
+        && data.cells is map
+        && (!data.keys().hasAny(['times']) || data.times is list);
     }
 
     function validReminder() {
@@ -116,7 +137,11 @@ service cloud.firestore {
 
     match /users/{userId}/classes/{classId} {
       allow read, delete: if owns(userId);
-      allow update: if owns(userId) && validLegacyClass();
+      allow update: if owns(userId)
+        && (validLegacyClass()
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'has_schedule', 'subjects', 'cells', 'times'
+          ]) && validMemberSchedule()));
       allow create: if owns(userId)
         && request.resource.data.keys().hasAll(['access_code', 'created_at'])
         && request.resource.data.keys().hasOnly(['access_code', 'created_at'])
@@ -145,7 +170,7 @@ service cloud.firestore {
       allow create: if request.auth != null && validClass(classId);
       allow update: if isClassMember(classId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'has_schedule', 'subjects', 'cells'
+          'name', 'has_schedule', 'subjects', 'cells', 'times'
         ]);
       allow delete: if false;
 

@@ -35,6 +35,7 @@ class ScheduleClass {
     required this.hasSchedule,
     required this.subjects,
     required this.cells,
+    this.times = classTimes,
     this.accessCode = '',
   });
 
@@ -43,6 +44,7 @@ class ScheduleClass {
   final bool hasSchedule;
   final List<ClassSubject> subjects;
   final Map<String, String> cells;
+  final List<String> times;
   final String accessCode;
 
   factory ScheduleClass.fromMap(Map<String, dynamic> map) => ScheduleClass(
@@ -56,6 +58,10 @@ class ScheduleClass {
         cells: (map['cells'] as Map<String, dynamic>? ?? const {}).map(
           (key, value) => MapEntry(key, value as String),
         ),
+        times: (map['times'] as List<dynamic>?)
+                ?.map((time) => time as String)
+                .toList() ??
+            classTimes,
         accessCode: map['access_code'] as String? ?? '',
       );
 
