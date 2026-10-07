@@ -53,21 +53,23 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(WEBKITGTK_4_0 QUIET webkit2gtk-4.0)
+if(NOT WEBKITGTK_4_0_FOUND)
+  pkg_check_modules(WEBKITGTK_4_1 QUIET webkit2gtk-4.1)
+  if(WEBKITGTK_4_1_FOUND)
+    set(TASKDAM_PKGCONFIG_COMPAT_DIR "${CMAKE_CURRENT_BINARY_DIR}/pkgconfig")
+    file(MAKE_DIRECTORY "${TASKDAM_PKGCONFIG_COMPAT_DIR}")
+    file(WRITE "${TASKDAM_PKGCONFIG_COMPAT_DIR}/webkit2gtk-4.0.pc"
+      "Name: webkit2gtk-4.0\n"
+      "Description: WebKitGTK 4.0 compatibility alias for 4.1\n"
+      "Version: ${WEBKITGTK_4_1_VERSION}\n"
+      "Requires: webkit2gtk-4.1\n"
+    )
+    set(ENV{PKG_CONFIG_PATH}
+      "${TASKDAM_PKGCONFIG_COMPAT_DIR}:$ENV{PKG_CONFIG_PATH}")
+  endif()
+endif()
 find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
-
-set(TASKDAM_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/taskdam_resources.c")
-add_custom_command(
-  OUTPUT "${TASKDAM_RESOURCE_SOURCE}"
-  COMMAND "${GLIB_COMPILE_RESOURCES}"
-    --generate-source
-    --target="${TASKDAM_RESOURCE_SOURCE}"
-    --sourcedir="${CMAKE_CURRENT_SOURCE_DIR}/runner/resources"
-    "${CMAKE_CURRENT_SOURCE_DIR}/runner/taskdam.gresource.xml"
-  DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/runner/taskdam.gresource.xml"
-    "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/taskdam.png"
-  VERBATIM
-)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")

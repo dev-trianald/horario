@@ -50,7 +50,7 @@ cp -an /tmp/taskdam-platforms/android /tmp/taskdam-platforms/ios /tmp/taskdam-pl
 
 No pongas credenciales de cuentas de servicio en la app. La seguridad depende de Firebase Authentication y las reglas de Firestore. Los usuarios y apuntes que ya están en Supabase permanecen allí; hay que crear las cuentas de nuevo en Firebase y exportar/importar los apuntes por separado si quieres conservarlos.
 
-En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK.
+En Linux, compilar iOS requiere macOS y Xcode; Android necesita Android Studio/SDK. La app Flutter no puede usar Firebase Authentication ni Cloud Firestore en Linux porque esos plugins no ofrecen soporte nativo para esta plataforma; para usar todas las funciones, abre la [versión web](https://horario-eba89.web.app/).
 
 ### Publicar Flutter en Firebase Hosting
 

@@ -6,6 +6,20 @@ project(runner LANGUAGES CXX)
 # work.
 #
 # Any new source files that you add to the application should be added here.
+set(TASKDAM_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/taskdam_resources.c")
+add_custom_command(
+  OUTPUT "${TASKDAM_RESOURCE_SOURCE}"
+  COMMAND "${GLIB_COMPILE_RESOURCES}"
+    --generate-source
+    --target "${TASKDAM_RESOURCE_SOURCE}"
+    --sourcedir "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    "${CMAKE_CURRENT_SOURCE_DIR}/taskdam.gresource.xml"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/taskdam.gresource.xml"
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/taskdam.png"
+  VERBATIM
+)
+
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"

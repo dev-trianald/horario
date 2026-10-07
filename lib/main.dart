@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
@@ -19,7 +21,8 @@ Future<void> main() async {
     if (firebaseConfigured) {
       await initializeFirebase();
     } else {
-      configurationError = 'Faltan las opciones de Firebase de esta plataforma.';
+      configurationError =
+          'Faltan las opciones de Firebase de esta plataforma.';
     }
   } catch (error) {
     configurationError = error.toString();
@@ -117,10 +120,20 @@ class ConfigurationPage extends StatelessWidget {
                   Text('TaskDAM',
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Configura Firebase ejecutando flutterfire configure desde la raíz del proyecto. El asistente generará las opciones necesarias para web, Android e iOS.',
-                  ),
-                  if (error != null) ...[
+                  if (defaultTargetPlatform == TargetPlatform.linux) ...[
+                    const Text(
+                      'La versión de escritorio para Linux no puede conectarse a Firebase: Firebase Authentication y Cloud Firestore no tienen soporte nativo para Linux en esta app. No se soluciona ejecutando flutterfire configure.',
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Mientras tanto, puedes usar la versión web:'),
+                    const SelectableText('https://horario-eba89.web.app/'),
+                  ] else ...[
+                    const Text(
+                      'Configura Firebase ejecutando flutterfire configure desde la raíz del proyecto. El asistente generará las opciones necesarias para web, Android e iOS.',
+                    ),
+                  ],
+                  if (error != null &&
+                      defaultTargetPlatform != TargetPlatform.linux) ...[
                     const SizedBox(height: 12),
                     Text(error!,
                         style: TextStyle(
