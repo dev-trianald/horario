@@ -34,3 +34,17 @@ flutter:
 flutter_launcher_icons:
   android: true
   image_path: icons/icon-192.png
+  ios: true
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: icons/taskdam-web.png
+    background_color: "#172124"
+    theme_color: "#172124"
+  windows:
+    generate: true
+    image_path: icons/icon-192.png
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: icons/icon-192.png

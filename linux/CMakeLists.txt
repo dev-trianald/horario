@@ -1,6 +1,6 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.13)
-project(runner LANGUAGES CXX)
+project(runner LANGUAGES C CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
@@ -53,6 +53,21 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 # System-level dependencies.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
+
+set(TASKDAM_RESOURCE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/taskdam_resources.c")
+add_custom_command(
+  OUTPUT "${TASKDAM_RESOURCE_SOURCE}"
+  COMMAND "${GLIB_COMPILE_RESOURCES}"
+    --generate-source
+    --target="${TASKDAM_RESOURCE_SOURCE}"
+    --sourcedir="${CMAKE_CURRENT_SOURCE_DIR}/runner/resources"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runner/taskdam.gresource.xml"
+  DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/runner/taskdam.gresource.xml"
+    "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/taskdam.png"
+  VERBATIM
+)
 
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")

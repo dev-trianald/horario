@@ -1,0 +1,5 @@
+<gresources>
+  <gresource prefix="/es/taskdam">
+    <file>taskdam.png</file>
+  </gresource>
+</gresources>

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradiente de la tarjeta del horario -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#343a46"/>
+      <stop offset="100%" stop-color="#21252f"/>
+    </linearGradient>
+
+    <!-- Gradiente de la cabecera -->
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2980b9"/>
+      <stop offset="100%" stop-color="#8e44ad"/>
+    </linearGradient>
+
+    <!-- Sombras -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+    
+    <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(256 256) scale(1.2) translate(-256 -256)">
+    <!-- Tarjeta central ajustada a la zona segura de Android -->
+    <g filter="url(#shadow)">
+      <rect x="86" y="86" width="340" height="340" rx="28" fill="url(#cardGrad)"/>
+    </g>
+
+    <!-- Cabecera -->
+    <path d="M 86 114 C 86 98.5 98.5 86 114 86 L 398 86 C 413.5 86 426 98.5 426 114 L 426 156 L 86 156 Z" fill="url(#headerGrad)"/>
+
+    <!-- Anillas -->
+    <rect x="150" y="66" width="18" height="36" rx="9" fill="#ffffff" opacity="0.9"/>
+    <rect x="344" y="66" width="18" height="36" rx="9" fill="#ffffff" opacity="0.9"/>
+
+    <!-- Símbolo < /> -->
+    <path d="M 226 111 L 212 121 L 226 131 M 286 111 L 300 121 L 286 131 M 264 105 L 248 137" 
+          stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.95"/>
+
+    <!-- Bloques de asignaturas -->
+    <rect x="114" y="180" width="80" height="52" rx="10" fill="#555555"/>
+    <rect x="216" y="180" width="80" height="52" rx="10" fill="#2980b9"/>
+    <rect x="318" y="180" width="80" height="52" rx="10" fill="#27ae60"/>
+
+    <rect x="114" y="248" width="80" height="52" rx="10" fill="#8e44ad"/>
+    <rect x="216" y="248" width="80" height="52" rx="10" fill="#d35400"/>
+    <rect x="318" y="248" width="80" height="52" rx="10" fill="#16a085"/>
+
+    <rect x="114" y="316" width="80" height="52" rx="10" fill="#2c3e50"/>
+    <rect x="216" y="316" width="80" height="52" rx="10" fill="#3a536c"/>
+    <rect x="318" y="316" width="80" height="52" rx="10" fill="#b7950b"/>
+
+    <!-- Tick de tareas -->
+    <g filter="url(#badgeShadow)">
+      <circle cx="376" cy="376" r="38" fill="#27ae60"/>
+      <circle cx="376" cy="376" r="38" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.3"/>
+      <path d="M 360 376 L 371 387 L 393 365" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </g>
+  </g>
+</svg>
