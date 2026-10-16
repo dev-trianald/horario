@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [Restaurar2]
+    branches: [Restaurar2, calendario]
   workflow_dispatch:
 
 permissions:
