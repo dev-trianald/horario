@@ -905,9 +905,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Añadir recordatorio'),
                 )
               : null,
-      bottomNavigationBar: _showStandaloneCalendar
-          ? null
-          : activeClass == null
+      bottomNavigationBar: activeClass == null
           ? NavigationBar(
               selectedIndex: _homeTab,
               onDestinationSelected: (index) =>
@@ -923,11 +921,14 @@ class _HomeScreenState extends State<HomeScreen> {
           : isDesktop
               ? null
               : NavigationBar(
-                  selectedIndex: _tab,
+                  selectedIndex: _showStandaloneCalendar ? 4 : _tab,
                   onDestinationSelected: (index) {
                     setState(() {
-                      _tab = index;
-                      _showClassMembers = index == 3;
+                      _showStandaloneCalendar = index == 4;
+                      if (index < 4) {
+                        _tab = index;
+                        _showClassMembers = index == 3;
+                      }
                     });
                     if (index == 3) unawaited(_loadClassMembers());
                   },
@@ -941,6 +942,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: 'Recordatorios'),
                     NavigationDestination(
                         icon: Icon(Icons.groups_outlined), label: 'Usuarios'),
+                    NavigationDestination(
+                        icon: Icon(Icons.calendar_month_outlined),
+                        label: 'Calendario'),
                   ],
                 ),
     );

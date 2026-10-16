@@ -477,6 +477,32 @@ void main() {
     expect(find.byTooltip('Abrir calendario'), findsOneWidget);
   });
 
+  testWidgets('opens the calendar from mobile class navigation',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    await _createClassAndSchedule(tester);
+
+    await tester.tap(find.text('Calendario').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('calendar-month-grid')), findsOneWidget);
+    expect(find.text('Calendario'), findsNWidgets(2));
+
+    await tester.tap(find.text('Horario').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('calendar-month-grid')), findsNothing);
+    expect(find.text('Horario'), findsWidgets);
+  });
+
   testWidgets('creates a class from an existing schedule', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1440, 900);
