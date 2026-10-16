@@ -1,9 +1,11 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taskdam/data/schedule.dart';
 import 'package:taskdam/models/schedule_class.dart';
+import 'package:taskdam/models/task.dart';
 import 'package:taskdam/services/task_service.dart';
 import 'package:taskdam/screens/home_screen.dart';
 
@@ -41,7 +43,7 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    expect(find.text('Mis clases'), findsNWidgets(2));
+    expect(find.text('Mis clases'), findsNWidgets(3));
     await _createClassAndSchedule(tester);
 
     expect(find.text('Pendientes'), findsOneWidget);
@@ -102,7 +104,7 @@ void main() {
       'class users can add a member tasks and reminders to their schedule',
       (tester) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = const Size(390, 1800);
     addTearDown(() async {
       await tester.pumpWidget(const SizedBox.shrink());
       tester.view.resetPhysicalSize();
@@ -126,9 +128,26 @@ void main() {
       isExam: true,
       scheduleId: classId,
     );
+    final completedTaskId = await owner.saveTask(
+      day: 'Martes',
+      subject: 'Programación',
+      message: 'Tarea completada compartida',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 9, 28),
+      isExam: false,
+      scheduleId: classId,
+    );
+    await owner.setTaskCompleted(completedTaskId, true);
     await owner.saveReminder(
       subject: 'Programación',
-      message: 'Recordatorio compartido',
+      message: 'Recordatorio completado compartido',
+      scheduleId: classId,
+    );
+    final completedReminder = (await owner.loadReminders()).single;
+    await owner.setReminderCompleted(completedReminder.id, true);
+    await owner.saveReminder(
+      subject: 'Programación',
+      message: 'Recordatorio pendiente compartido',
       scheduleId: classId,
     );
     final viewerAuth = MockFirebaseAuth(
@@ -150,13 +169,18 @@ void main() {
 
     final sharedTask = find.textContaining('Apunte para compartir');
     expect(sharedTask, findsOneWidget);
-    expect(find.text('Recordatorio compartido'), findsOneWidget);
+    expect(find.textContaining('Tarea completada compartida'), findsOneWidget);
+    expect(find.text('Recordatorio pendiente compartido'), findsOneWidget);
+    expect(find.text('Recordatorio completado compartido'), findsOneWidget);
+    expect(find.text('Completadas'), findsOneWidget);
+    expect(find.text('Completados'), findsOneWidget);
+    expect(find.text('Pendientes'), findsNWidgets(2));
     final taskCard = find.ancestor(
       of: sharedTask,
       matching: find.byType(Card),
     );
     final reminderCard = find.ancestor(
-      of: find.text('Recordatorio compartido'),
+      of: find.text('Recordatorio pendiente compartido'),
       matching: find.byType(Card),
     );
     expect(
@@ -167,7 +191,7 @@ void main() {
       find.descendant(of: reminderCard, matching: find.byType(IconButton)),
       findsNothing,
     );
-    expect(find.text('Agregar a tu horario'), findsNWidgets(2));
+    expect(find.text('Agregar a tu horario'), findsNWidgets(4));
 
     await tester.tap(find.text('Agregar a tu horario').first);
     await tester.pumpAndSettle();
@@ -424,6 +448,35 @@ void main() {
     expect(find.text('2º DAM tarde'), findsWidgets);
   });
 
+  testWidgets('opens the standalone calendar from the class app bar',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+    await _createClassAndSchedule(tester);
+
+    await tester.tap(find.byTooltip('Abrir calendario'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('calendar-month-grid')), findsOneWidget);
+    expect(find.text('Calendario'), findsOneWidget);
+    expect(find.byTooltip('Volver a la clase'), findsOneWidget);
+    expect(find.byTooltip('Editar nombre de la clase'), findsNothing);
+
+    await tester.tap(find.byTooltip('Volver a la clase'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('calendar-month-grid')), findsNothing);
+    expect(find.text('Pendientes'), findsOneWidget);
+    expect(find.byTooltip('Abrir calendario'), findsOneWidget);
+  });
+
   testWidgets('creates a class from an existing schedule', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1440, 900);
@@ -497,6 +550,198 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('schedule-cell-Lunes-0')), findsOneWidget);
     expect(find.text('Crear asignatura'), findsOneWidget);
+  });
+
+  testWidgets('calendar is a separate month view and saves weekend tasks',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final firestore = FakeFirebaseFirestore();
+    final auth = MockFirebaseAuth(
+      signedIn: true,
+      mockUser: MockUser(uid: 'calendar-student', email: 'student@example.com'),
+    );
+    final service = TaskService(firestore, auth);
+    final classId = await service.createClass(
+      '2º DAM',
+      'CAL2026',
+      scheduleTemplate: const ScheduleClass(
+        id: 'calendar-template',
+        name: 'Horario',
+        hasSchedule: true,
+        subjects: [
+          ClassSubject(
+            id: 'programacion',
+            name: 'Programación',
+            teacher: 'Lucía',
+            color: '#2787A0',
+          ),
+        ],
+        cells: {},
+      ),
+    );
+    final now = DateTime.now();
+    final taskDate = DateTime(now.year, now.month, 10);
+    final weekStart = mondayOf(taskDate);
+    final taskDay = calendarWeekdays[taskDate.weekday - 1];
+    await service.saveTask(
+      day: taskDay,
+      subject: 'Programación',
+      message: 'Entregar práctica',
+      color: '#2787A0',
+      weekStart: weekStart,
+      isExam: false,
+      scheduleId: classId,
+    );
+    for (final message in ['Repasar ejercicios', 'Preparar exposición']) {
+      await service.saveTask(
+        day: taskDay,
+        subject: 'Programación',
+        message: message,
+        color: '#2787A0',
+        weekStart: weekStart,
+        isExam: false,
+        scheduleId: classId,
+      );
+    }
+
+    await tester.pumpWidget(MaterialApp(
+      home: HomeScreen(auth: auth, firestore: firestore),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Calendario'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('LUN'), findsOneWidget);
+    expect(find.text('MAR'), findsOneWidget);
+    expect(find.text('MIÉ'), findsOneWidget);
+    expect(find.text('JUE'), findsOneWidget);
+    expect(find.text('VIE'), findsOneWidget);
+    expect(find.text('SÁB'), findsOneWidget);
+    expect(find.text('DOM'), findsOneWidget);
+    final monthGrid = find.byKey(const ValueKey('calendar-month-grid'));
+    expect(tester.getSize(monthGrid).width, lessThanOrEqualTo(390));
+    final taskCell = find.byKey(ValueKey('calendar-date-${dateKey(taskDate)}'));
+    await tester.ensureVisible(taskCell);
+    final moreTasks =
+        find.byKey(ValueKey('calendar-more-${dateKey(taskDate)}'));
+    expect(moreTasks, findsOneWidget);
+    expect(find.descendant(of: moreTasks, matching: find.text('+2 más')),
+        findsOneWidget);
+    await tester.tap(moreTasks);
+    await tester.pumpAndSettle();
+    expect(find.text('Entregar práctica'), findsOneWidget);
+    expect(find.text('Repasar ejercicios'), findsOneWidget);
+    expect(find.text('Preparar exposición'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Entregar práctica'))).pop();
+    await tester.pumpAndSettle();
+    await tester.tapAt(tester.getTopLeft(taskCell) + const Offset(14, 15));
+    await tester.pumpAndSettle();
+    expect(find.text('Entregar práctica'), findsOneWidget);
+    expect(find.text('Repasar ejercicios'), findsOneWidget);
+    expect(find.text('Preparar exposición'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Entregar práctica'))).pop();
+    await tester.pumpAndSettle();
+
+    final sourceTask = find.descendant(
+      of: taskCell,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Draggable<TaskItem>,
+      ),
+    );
+    final draggedTask =
+        tester.widget<Draggable<TaskItem>>(sourceTask.first).data!;
+    final draggedTaskId = draggedTask.id;
+    final targetDate = taskDate.add(const Duration(days: 1));
+    final targetCell =
+        find.byKey(ValueKey('calendar-drop-date-${dateKey(targetDate)}'));
+    await tester.ensureVisible(sourceTask);
+    final drag = await tester.startGesture(
+      tester.getCenter(sourceTask),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveTo(tester.getCenter(targetCell),
+        timeStamp: const Duration(milliseconds: 500));
+    await drag.up();
+    await tester.pumpAndSettle();
+
+    final movedDocument = await firestore
+        .collection('users')
+        .doc('calendar-student')
+        .collection('tasks')
+        .doc(draggedTaskId)
+        .get();
+    expect(
+        movedDocument.data()?['day'], calendarWeekdays[targetDate.weekday - 1]);
+    expect(movedDocument.data()?['week_start'], dateKey(mondayOf(targetDate)));
+    expect(
+        find.byKey(ValueKey('calendar-drag-$draggedTaskId')), findsOneWidget);
+    expect(
+        find.text(
+            'Tarea movida al ${calendarWeekdays[targetDate.weekday - 1]}.'),
+        findsOneWidget);
+
+    var saturdayDate = DateTime(now.year, now.month, 1);
+    while (saturdayDate.weekday != DateTime.saturday) {
+      saturdayDate = saturdayDate.add(const Duration(days: 1));
+    }
+    final saturdayCell =
+        find.byKey(ValueKey('calendar-date-${dateKey(saturdayDate)}'));
+    await tester.ensureVisible(saturdayCell);
+    await tester.tap(saturdayCell);
+    await tester.pumpAndSettle();
+    expect(find.text('No hay tareas para este día.'), findsOneWidget);
+    Navigator.of(tester.element(find.text('No hay tareas para este día.')))
+        .pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Añadir tarea'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<String>>(
+              find.byType(DropdownButtonFormField<String>).at(1))
+          .initialValue,
+      'Sábado',
+    );
+    await tester.enterText(find.byType(TextFormField).first, 'Repasar apuntes');
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+    await tester.pumpAndSettle();
+
+    final savedTasks = await firestore
+        .collection('users')
+        .doc('calendar-student')
+        .collection('tasks')
+        .get();
+    expect(savedTasks.docs, hasLength(4));
+    expect(
+      savedTasks.docs.map((document) => document.data()).any((task) =>
+          task['day'] == 'Sábado' &&
+          task['week_start'] == dateKey(mondayOf(saturdayDate))),
+      isTrue,
+    );
+    expect(
+      find.descendant(
+          of: saturdayCell,
+          matching: find.text('Programación: Repasar apuntes')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Mis clases'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2º DAM').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tareas'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('${calendarWeekdays[targetDate.weekday - 1]} · Programación'),
+      findsOneWidget,
+    );
+    expect(find.text('Entregar práctica'), findsOneWidget);
   });
 }
 

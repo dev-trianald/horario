@@ -48,8 +48,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showTaskHistory = false;
   bool _showReminderHistory = false;
   bool _showClassMembers = false;
+  bool _showStandaloneCalendar = false;
+  int _homeTab = 0;
   int _tab = 0;
   int _selectedDay = (DateTime.now().weekday - 1).clamp(0, 4).toInt();
+  DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTime _calendarSelectedDate =
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+  String _calendarClassFilter = '__all__';
+  String? _draggingCalendarTaskId;
   String? _selectedClassId;
   String? _selectedMemberId;
   bool _editingSchedule = false;
@@ -108,12 +115,73 @@ class _HomeScreenState extends State<HomeScreen> {
             !_classes.any((item) => item.id == _selectedClassId)) {
           _selectedClassId = null;
         }
+        if (_calendarClassFilter != '__all__' &&
+            !_classes.any((item) => item.id == _calendarClassFilter)) {
+          _calendarClassFilter = '__all__';
+        }
       });
     } catch (error) {
       _showMessage('No se pudieron cargar tus datos: $error');
     } finally {
       if (mounted) setState(() => _loadingData = false);
     }
+  }
+
+  Future<void> _addCalendarTask() async {
+    if (_user == null) {
+      _showMessage('Inicia sesión para añadir tareas y exámenes.');
+      await _showAccount();
+      return;
+    }
+    if (_classes.isEmpty) {
+      _showMessage('Crea o busca una clase antes de añadir una tarea.');
+      return;
+    }
+    ScheduleClass? classItem;
+    if (_calendarClassFilter != '__all__') {
+      classItem = _classes
+          .where((item) => item.id == _calendarClassFilter)
+          .firstOrNull;
+    } else if (_classes.length == 1) {
+      classItem = _classes.single;
+    } else {
+      classItem = await showModalBottomSheet<ScheduleClass>(
+        context: context,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: Text('Elige una clase',
+                    style: Theme.of(context).textTheme.titleLarge),
+              ),
+              for (final item in _classes)
+                ListTile(
+                  leading: const Icon(Icons.class_outlined),
+                  title: Text(item.name),
+                  subtitle: Text('${item.subjects.length} asignaturas'),
+                  enabled: item.subjects.isNotEmpty,
+                  onTap: () => Navigator.pop(context, item),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (!mounted || classItem == null) return;
+    if (classItem.subjects.isEmpty) {
+      _showMessage('Añade una asignatura a la clase antes de crear tareas.');
+      return;
+    }
+    final selectedDate = _calendarSelectedDate;
+    await _editTask(
+      day: calendarWeekdays[selectedDate.weekday - 1],
+      subject: classItem.subjects.first.name,
+      weekStart: mondayOf(selectedDate),
+      taskClass: classItem,
+    );
   }
 
   Future<void> _perform(Future<void> Function() operation) async {
@@ -389,14 +457,24 @@ class _HomeScreenState extends State<HomeScreen> {
     required String day,
     required String subject,
     TaskItem? task,
+    DateTime? weekStart,
+    ScheduleClass? taskClass,
   }) async {
     if (_user == null) {
       _showMessage('Inicia sesión para añadir tareas y exámenes.');
       await _showAccount();
       return;
     }
-    final classItem = _selectedClass;
-    if (classItem == null || classItem.subjects.isEmpty) {
+    final classItem = taskClass ??
+        _selectedClass ??
+        _classes
+            .where((item) => item.id == task?.scheduleId)
+            .firstOrNull;
+    if (classItem == null && task == null) {
+      _showMessage('Crea al menos una asignatura antes de añadir tareas.');
+      return;
+    }
+    if (classItem?.subjects.isEmpty == true && task == null) {
       _showMessage('Crea al menos una asignatura antes de añadir tareas.');
       return;
     }
@@ -407,12 +485,13 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) => TaskEditorSheet(
         day: day,
         subject: subject,
-        availableSubjects: classItem.subjects,
+        availableSubjects: classItem?.subjects ?? const [],
         task: task,
+        weekStart: weekStart,
       ),
     );
     if (!mounted || draft == null) return;
-    final selectedSubject = classItem.subjects
+    final selectedSubject = classItem?.subjects
         .where((item) => item.name == draft.subject)
         .firstOrNull;
     String? savedTaskId;
@@ -422,10 +501,10 @@ class _HomeScreenState extends State<HomeScreen> {
         day: draft.day,
         subject: draft.subject,
         message: draft.message,
-        color: selectedSubject?.color ?? '#2787A0',
+        color: selectedSubject?.color ?? task?.color ?? '#2787A0',
         weekStart: draft.weekStart,
         isExam: draft.isExam,
-        scheduleId: classItem.id,
+        scheduleId: task?.scheduleId ?? classItem?.id,
       );
     });
     if (savedTaskId != null && _calendarService.isConnected) {
@@ -679,17 +758,20 @@ class _HomeScreenState extends State<HomeScreen> {
         leading: activeClass == null
             ? null
             : IconButton(
-                tooltip: _showClassMembers
+                tooltip: _showStandaloneCalendar || _showClassMembers
                     ? 'Volver a la clase'
                     : 'Volver a mis clases',
                 onPressed: () => setState(() {
-                  if (_showClassMembers) {
+                  if (_showStandaloneCalendar) {
+                    _showStandaloneCalendar = false;
+                  } else if (_showClassMembers) {
                     _showClassMembers = false;
                     _selectedMemberId = null;
                     _tab = 0;
                   } else {
                     _selectedClassId = null;
                     _editingSchedule = false;
+                    _homeTab = 0;
                     _tab = 0;
                   }
                 }),
@@ -705,7 +787,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    activeClass?.name ?? 'TaskDAM',
+                    activeClass == null || _showStandaloneCalendar
+                        ? 'TaskDAM'
+                        : activeClass.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -714,8 +798,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   Text(
                     activeClass == null
-                        ? 'Mis clases'
-                        : _showClassMembers || _tab == 3
+                        ? _homeTab == 0
+                            ? 'Mis clases'
+                            : 'Calendario'
+                        : _showStandaloneCalendar
+                            ? 'Calendario'
+                            : _showClassMembers || _tab == 3
                             ? 'Usuarios de la clase'
                             : !activeClass.hasSchedule
                                 ? 'Configura tu horario'
@@ -734,13 +822,20 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          if (activeClass != null && isDesktop)
+          if (activeClass != null && !_showStandaloneCalendar)
+            IconButton(
+              tooltip: 'Abrir calendario',
+              onPressed: () =>
+                  setState(() => _showStandaloneCalendar = true),
+              icon: const Icon(Icons.calendar_month_outlined),
+            ),
+          if (activeClass != null && isDesktop && !_showStandaloneCalendar)
             IconButton(
               tooltip: 'Usuarios de la clase',
               onPressed: _openClassMembers,
               icon: const Icon(Icons.groups_outlined),
             ),
-          if (activeClass != null)
+          if (activeClass != null && !_showStandaloneCalendar)
             IconButton(
               tooltip: 'Editar nombre de la clase',
               onPressed: _editClassName,
@@ -765,8 +860,12 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 6),
         ],
       ),
-      body: activeClass == null
-          ? _buildClassHome()
+      body: _showStandaloneCalendar
+          ? _buildCalendar()
+          : activeClass == null
+          ? _homeTab == 0
+              ? _buildClassHome()
+              : _buildCalendar()
           : isDesktop
               ? _showClassMembers
                   ? _buildClassMembers()
@@ -780,7 +879,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildClassMembers(),
                   ],
                 ),
-      floatingActionButton: activeClass != null &&
+      floatingActionButton: !_showStandaloneCalendar &&
+              activeClass != null &&
               activeClass.hasSchedule &&
               activeClass.subjects.isNotEmpty &&
               !isDesktop &&
@@ -795,9 +895,9 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text('Añadir tarea'),
             )
           : activeClass != null &&
-                  activeClass.hasSchedule &&
-                  !isDesktop &&
-                  _tab == 2 &&
+                      activeClass.hasSchedule &&
+                      !isDesktop &&
+                      _tab == 2 &&
                   _user != null
               ? FloatingActionButton.extended(
                   onPressed: () => _editReminder(),
@@ -805,28 +905,44 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text('Añadir recordatorio'),
                 )
               : null,
-      bottomNavigationBar: activeClass == null || isDesktop
+      bottomNavigationBar: _showStandaloneCalendar
           ? null
-          : NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (index) {
-                setState(() {
-                  _tab = index;
-                  _showClassMembers = index == 3;
-                });
-                if (index == 3) unawaited(_loadClassMembers());
-              },
+          : activeClass == null
+          ? NavigationBar(
+              selectedIndex: _homeTab,
+              onDestinationSelected: (index) =>
+                  setState(() => _homeTab = index),
               destinations: const [
                 NavigationDestination(
-                    icon: Icon(Icons.view_week_outlined), label: 'Horario'),
+                    icon: Icon(Icons.class_outlined), label: 'Mis clases'),
                 NavigationDestination(
-                    icon: Icon(Icons.checklist), label: 'Tareas'),
-                NavigationDestination(
-                    icon: Icon(Icons.bookmark_border), label: 'Recordatorios'),
-                NavigationDestination(
-                    icon: Icon(Icons.groups_outlined), label: 'Usuarios'),
+                    icon: Icon(Icons.calendar_month_outlined),
+                    label: 'Calendario'),
               ],
-            ),
+            )
+          : isDesktop
+              ? null
+              : NavigationBar(
+                  selectedIndex: _tab,
+                  onDestinationSelected: (index) {
+                    setState(() {
+                      _tab = index;
+                      _showClassMembers = index == 3;
+                    });
+                    if (index == 3) unawaited(_loadClassMembers());
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                        icon: Icon(Icons.view_week_outlined), label: 'Horario'),
+                    NavigationDestination(
+                        icon: Icon(Icons.checklist), label: 'Tareas'),
+                    NavigationDestination(
+                        icon: Icon(Icons.bookmark_border),
+                        label: 'Recordatorios'),
+                    NavigationDestination(
+                        icon: Icon(Icons.groups_outlined), label: 'Usuarios'),
+                  ],
+                ),
     );
   }
 
@@ -878,9 +994,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildMemberNotes(ClassMember member) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
+  Widget _buildMemberNotes(ClassMember member) {
+    final pendingTasks = tasksByDateProximity(
+      _memberTasks.where((task) => !task.completed),
+    );
+    final completedTasks = tasksByDateProximity(
+      _memberTasks.where((task) => task.completed),
+    );
+    final pendingReminders = remindersByCreationDate(
+      _memberReminders.where((reminder) => !reminder.completed),
+    );
+    final completedReminders = remindersByCreationDate(
+      _memberReminders.where((reminder) => reminder.completed),
+    );
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      children: [
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
@@ -901,10 +1031,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('Tareas y exámenes',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            if (_memberTasks.isEmpty)
-              const Text('No ha compartido tareas para esta clase.')
+            Text('Pendientes',
+                style: Theme.of(context).textTheme.titleSmall),
+            if (pendingTasks.isEmpty)
+              const Text('No ha compartido tareas pendientes.')
             else
-              for (final task in _memberTasks) ...[
+              for (final task in pendingTasks) ...[
                 Card(
                   child: ListTile(
                     leading: Icon(task.isExam
@@ -922,9 +1054,34 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                       ],
                     ),
-                    trailing: task.completed
-                        ? const Icon(Icons.done_all, size: 18)
-                        : null,
+                  ),
+                ),
+              ],
+            const SizedBox(height: 12),
+            Text('Completadas',
+                style: Theme.of(context).textTheme.titleSmall),
+            if (completedTasks.isEmpty)
+              const Text('No ha compartido tareas completadas.')
+            else
+              for (final task in completedTasks) ...[
+                Card(
+                  child: ListTile(
+                    leading: Icon(task.isExam
+                        ? Icons.fact_check_outlined
+                        : Icons.checklist),
+                    title: Text(task.subject),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${task.day} · ${task.message}'),
+                        if (member.id != _user?.uid)
+                          _memberItemButton(
+                            key: _memberItemKey('task', task.id),
+                            onPressed: () => _addMemberTaskToSchedule(task),
+                          ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.done_all, size: 18),
                   ),
                 ),
               ],
@@ -932,10 +1089,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Text('Recordatorios',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
-            if (_memberReminders.isEmpty)
-              const Text('No ha compartido recordatorios para esta clase.')
+            Text('Pendientes',
+                style: Theme.of(context).textTheme.titleSmall),
+            if (pendingReminders.isEmpty)
+              const Text('No ha compartido recordatorios pendientes.')
             else
-              for (final reminder in _memberReminders) ...[
+              for (final reminder in pendingReminders) ...[
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.bookmark_border),
@@ -952,15 +1111,40 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                       ],
                     ),
-                    trailing: reminder.completed
-                        ? const Icon(Icons.done_all, size: 18)
-                        : null,
+                  ),
+                ),
+              ],
+            const SizedBox(height: 12),
+            Text('Completados',
+                style: Theme.of(context).textTheme.titleSmall),
+            if (completedReminders.isEmpty)
+              const Text('No ha compartido recordatorios completados.')
+            else
+              for (final reminder in completedReminders) ...[
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.bookmark_border),
+                    title: Text(reminder.subject),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(reminder.message),
+                        if (member.id != _user?.uid)
+                          _memberItemButton(
+                            key: _memberItemKey('reminder', reminder.id),
+                            onPressed: () =>
+                                _addMemberReminderToSchedule(reminder),
+                          ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.done_all, size: 18),
                   ),
                 ),
               ],
           ],
         ],
       );
+  }
 
   Widget _memberItemButton({
     required String key,
@@ -1513,6 +1697,495 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$day · ${classItem.times[period]} · ${target?.name ?? 'Vacía'}';
   }
 
+  Widget _buildCalendar() {
+    if (_user == null) {
+      return _SignInPrompt(onSignIn: _showAccount);
+    }
+    final firstDay = DateTime(_calendarMonth.year, _calendarMonth.month);
+    final lastDay = DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0);
+    final gridStart = mondayOf(firstDay);
+    final visibleDays =
+        ((lastDay.difference(gridStart).inDays + 1 + 6) ~/ 7) * 7;
+    final monthTasks = _tasks
+        .where((task) =>
+            _calendarClassFilter == '__all__' ||
+            task.scheduleId == _calendarClassFilter)
+        .toList();
+    final monthlyTaskCount = monthTasks.where((task) {
+      final weekdayIndex = calendarWeekdays.indexOf(task.day);
+      if (weekdayIndex < 0) return false;
+      final taskDate =
+          mondayOf(task.weekStart).add(Duration(days: weekdayIndex));
+      return !taskDate.isBefore(firstDay) && !taskDate.isAfter(lastDay);
+    }).length;
+    const monthNames = [
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
+    ];
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final gridWidth = screenWidth;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Mes anterior',
+                onPressed: () => _moveCalendarMonth(-1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Text(
+                  '${monthNames[_calendarMonth.month - 1]} ${_calendarMonth.year}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Mes siguiente',
+                onPressed: () => _moveCalendarMonth(1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+              const SizedBox(width: 4),
+              OutlinedButton(
+                onPressed: () {
+                  final now = DateTime.now();
+                  setState(() {
+                    _calendarMonth = DateTime(now.year, now.month);
+                    _calendarSelectedDate =
+                        DateTime(now.year, now.month, now.day);
+                  });
+                },
+                child: const Text('Hoy'),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Añadir tarea',
+                onPressed: _addCalendarTask,
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _calendarClassFilter,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Clase',
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '__all__',
+                      child: Text('Todas las clases'),
+                    ),
+                    for (final classItem in _classes)
+                      DropdownMenuItem<String>(
+                        value: classItem.id,
+                        child: Text(classItem.name,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _calendarClassFilter = value);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '$monthlyTaskCount ${monthlyTaskCount == 1 ? 'tarea' : 'tareas'}',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: gridWidth,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        for (final day in const [
+                          'LUN',
+                          'MAR',
+                          'MIÉ',
+                          'JUE',
+                          'VIE',
+                          'SÁB',
+                          'DOM'
+                        ])
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Text(
+                                day,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final rows = visibleDays ~/ 7;
+                        return GridView.builder(
+                          key: const ValueKey('calendar-month-grid'),
+                          padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 7,
+                            mainAxisExtent:
+                                (constraints.maxHeight - 8) / rows,
+                          ),
+                          itemCount: visibleDays,
+                          itemBuilder: (context, index) {
+                        final date = gridStart.add(Duration(days: index));
+                        final isCurrentMonth =
+                            date.month == _calendarMonth.month;
+                        final isSelected =
+                            dateKey(date) == dateKey(_calendarSelectedDate);
+                        final isToday = dateKey(date) == dateKey(DateTime.now());
+                        final visibleTaskCount = gridWidth < 700 ? 1 : 2;
+                        final tasks = monthTasks.where((task) {
+                          final weekdayIndex =
+                              calendarWeekdays.indexOf(task.day);
+                          if (weekdayIndex < 0) return false;
+                          final taskDate = mondayOf(task.weekStart)
+                              .add(Duration(days: weekdayIndex));
+                          return dateKey(taskDate) == dateKey(date);
+                        }).toList();
+                        return DragTarget<TaskItem>(
+                          key: ValueKey('calendar-drop-date-${dateKey(date)}'),
+                          onAcceptWithDetails: (details) => unawaited(
+                              _moveCalendarTask(details.data, date)),
+                          builder: (context, candidates, rejected) {
+                            final isDropTarget = candidates.isNotEmpty;
+                            return Card(
+                              key:
+                                  ValueKey('calendar-date-${dateKey(date)}'),
+                              margin: const EdgeInsets.all(2),
+                              clipBehavior: Clip.antiAlias,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                side: BorderSide(
+                                  color: isDropTarget
+                                      ? Theme.of(context).colorScheme.primary
+                                      : isSelected
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .outlineVariant,
+                                  width: isDropTarget || isSelected ? 2 : 0.6,
+                                ),
+                              ),
+                              color: isDropTarget
+                                  ? Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer
+                                  : isCurrentMonth
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerLow
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .surfaceContainerLowest,
+                              child: InkWell(
+                                onTap: () {
+                                  setState(
+                                      () => _calendarSelectedDate = date);
+                                  unawaited(
+                                      _showCalendarDayTasks(date, tasks));
+                                },
+                                child: Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      width: 26,
+                                      height: 26,
+                                      alignment: Alignment.center,
+                                      decoration: isToday
+                                          ? BoxDecoration(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
+                                              shape: BoxShape.circle,
+                                            )
+                                          : null,
+                                      child: Text(
+                                        '${date.day}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              color: !isCurrentMonth
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant
+                                                  : isToday
+                                                      ? Theme.of(context)
+                                                          .colorScheme
+                                                          .onPrimary
+                                                      : null,
+                                              fontWeight: isToday || isSelected
+                                                  ? FontWeight.w800
+                                                  : FontWeight.w500,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  for (final task in
+                                      tasks.take(visibleTaskCount))
+                                    Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 3),
+                                      child: _CalendarMonthTask(
+                                        task: task,
+                                        draggable: true,
+                                        isDragging:
+                                            _draggingCalendarTaskId == task.id,
+                                        onDragStarted: () => setState(
+                                            () => _draggingCalendarTaskId =
+                                                task.id),
+                                        onDragEnd: (_) => setState(
+                                            () => _draggingCalendarTaskId =
+                                                null),
+                                        onTap: () => _editTask(
+                                          day: task.day,
+                                          subject: task.subject,
+                                          task: task,
+                                        ),
+                                      ),
+                                    ),
+                                  if (tasks.length > visibleTaskCount)
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: TextButton(
+                                        key: ValueKey(
+                                            'calendar-more-${dateKey(date)}'),
+                                        onPressed: () {
+                                          setState(() =>
+                                              _calendarSelectedDate = date);
+                                          _showCalendarDayTasks(date, tasks);
+                                        },
+                                        style: TextButton.styleFrom(
+                                          minimumSize: Size.zero,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 2, vertical: 1),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        child: Text(
+                                          '+${tasks.length - visibleTaskCount} más',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                                ),
+                              ),
+                              ),
+                            );
+                          },
+                        );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _moveCalendarMonth(int offset) {
+    setState(() {
+      _calendarMonth =
+          DateTime(_calendarMonth.year, _calendarMonth.month + offset);
+      _calendarSelectedDate =
+          DateTime(_calendarMonth.year, _calendarMonth.month);
+    });
+  }
+
+  Future<void> _moveCalendarTask(TaskItem task, DateTime targetDate) async {
+    final day = calendarWeekdays[targetDate.weekday - 1];
+    final weekStart = mondayOf(targetDate);
+    if (task.day == day && dateKey(mondayOf(task.weekStart)) == dateKey(weekStart)) {
+      return;
+    }
+    if (_user == null) {
+      _showMessage('Inicia sesión para mover tareas.');
+      return;
+    }
+
+    try {
+      await _service.saveTask(
+        id: task.id,
+        day: day,
+        subject: task.subject,
+        message: task.message,
+        color: task.color,
+        weekStart: weekStart,
+        isExam: task.isExam,
+        scheduleId: task.scheduleId,
+      );
+      if (!mounted) return;
+      setState(() => _draggingCalendarTaskId = null);
+      await _loadData();
+      if (!mounted) return;
+      _showMessage('Tarea movida al $day.');
+      if (_calendarService.isConnected) {
+        final movedTask = TaskItem(
+          id: task.id,
+          day: day,
+          subject: task.subject,
+          message: task.message,
+          color: task.color,
+          weekStart: weekStart,
+          isExam: task.isExam,
+          completed: task.completed,
+          scheduleId: task.scheduleId,
+        );
+        try {
+          await _calendarService.syncTask(movedTask, update: true);
+        } catch (error) {
+          _showMessage(
+              'La tarea se movió, pero Google Calendar no se actualizó: $error');
+        }
+      }
+    } catch (error) {
+      _showMessage('No se pudo mover la tarea: $error');
+    } finally {
+      if (mounted) setState(() => _draggingCalendarTaskId = null);
+    }
+  }
+
+  Future<void> _showCalendarDayTasks(
+      DateTime date, List<TaskItem> tasks) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * 0.75,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${calendarWeekdays[date.weekday - 1]} · ${DateFormat('dd/MM/yyyy').format(date)}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              if (tasks.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Text(
+                    'No hay tareas para este día.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                    itemCount: tasks.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final task = tasks[index];
+                      return _CalendarMonthTask(
+                        task: task,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _editTask(
+                            day: task.day,
+                            subject: task.subject,
+                            task: task,
+                          );
+                        },
+                        expanded: true,
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTasks({bool desktop = false}) {
     if (_user == null) {
       return desktop
@@ -1521,13 +2194,12 @@ class _HomeScreenState extends State<HomeScreen> {
           : _SignInPrompt(onSignIn: _showAccount);
     }
     final classItem = _selectedClass;
-    final visible = _tasks
+    final visible = tasksByDateProximity(_tasks
         .where((task) =>
             (classItem == null ||
                 task.scheduleId == null ||
                 task.scheduleId == classItem.id) &&
-            task.completed == _showTaskHistory)
-        .toList();
+            task.completed == _showTaskHistory));
     return Column(
       children: [
         _SectionHeader(
@@ -2112,6 +2784,100 @@ class _SectionHeader extends StatelessWidget {
       );
 }
 
+class _CalendarMonthTask extends StatelessWidget {
+  const _CalendarMonthTask({
+    required this.task,
+    required this.onTap,
+    this.expanded = false,
+    this.draggable = false,
+    this.isDragging = false,
+    this.onDragStarted,
+    this.onDragEnd,
+  });
+
+  final TaskItem task;
+  final VoidCallback onTap;
+  final bool expanded;
+  final bool draggable;
+  final bool isDragging;
+  final VoidCallback? onDragStarted;
+  final ValueChanged<DraggableDetails>? onDragEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _parseColor(task.color);
+    if (expanded) {
+      return Card(
+        key: ValueKey('calendar-day-task-${task.id}'),
+        color: color.withValues(alpha: 0.18),
+        child: ListTile(
+          leading: Icon(
+            task.isExam ? Icons.school_outlined : Icons.checklist,
+            color: color,
+          ),
+          title: Text(task.subject),
+          subtitle: Text(task.message),
+          trailing: task.completed
+              ? const Icon(Icons.check_circle_outline)
+              : null,
+          onTap: onTap,
+        ),
+      );
+    }
+    Widget tile() => Material(
+          color: color.withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(5),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              child: Row(
+                children: [
+                  if (task.isExam)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 3),
+                      child: Icon(Icons.school_outlined, size: 12),
+                    ),
+                  Expanded(
+                    child: Text(
+                      '${task.subject}: ${task.message}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w600,
+                            decoration: task.completed
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+    if (!draggable) return tile();
+    return Draggable<TaskItem>(
+      key: ValueKey('calendar-drag-${task.id}'),
+      data: task,
+      onDragStarted: onDragStarted,
+      onDragEnd: onDragEnd,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(width: 190, child: tile()),
+      ),
+      childWhenDragging: Opacity(opacity: 0.25, child: tile()),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: isDragging ? 0.25 : 1,
+        child: tile(),
+      ),
+    );
+  }
+}
+
 class _TaskCard extends StatelessWidget {
   const _TaskCard(
       {required this.task,
@@ -2126,7 +2892,7 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final weekEnd = task.weekStart.add(const Duration(days: 4));
+    final weekEnd = task.weekStart.add(const Duration(days: 6));
     final weekText =
         '${DateFormat('dd/MM').format(task.weekStart)} - ${DateFormat('dd/MM').format(weekEnd)}';
     return _AccentCard(

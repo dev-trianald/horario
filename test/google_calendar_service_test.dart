@@ -49,4 +49,30 @@ void main() {
       ),
     );
   });
+
+  test('maps Saturday and Sunday tasks to their dates after Monday', () {
+    final saturday = TaskItem(
+      id: 'task-saturday',
+      day: 'Sábado',
+      subject: 'Matemáticas',
+      message: 'Repasar',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 10, 12),
+      isExam: false,
+      completed: false,
+    );
+    final sunday = TaskItem(
+      id: 'task-sunday',
+      day: 'Domingo',
+      subject: 'Matemáticas',
+      message: 'Entregar',
+      color: '#2787A0',
+      weekStart: DateTime(2026, 10, 12),
+      isExam: false,
+      completed: false,
+    );
+
+    expect(googleCalendarDateForTask(saturday), DateTime.utc(2026, 10, 17));
+    expect(googleCalendarDateForTask(sunday), DateTime.utc(2026, 10, 18));
+  });
 }

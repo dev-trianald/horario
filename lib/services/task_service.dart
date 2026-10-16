@@ -197,6 +197,7 @@ class TaskService {
         .map((document) => ReminderItem.fromMap({
               ...document.data(),
               'id': document.id,
+              'created_at': _createdAtDate(document.data()['created_at']),
             }))
         .toList();
   }
@@ -397,8 +398,15 @@ class TaskService {
         .map((document) => ReminderItem.fromMap({
               ...document.data(),
               'id': document.id,
+              'created_at': _createdAtDate(document.data()['created_at']),
             }))
         .toList();
+  }
+
+  DateTime? _createdAtDate(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
   }
 
   Future<String> saveTask({

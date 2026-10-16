@@ -5,6 +5,25 @@ import 'package:http/http.dart' as http;
 
 import '../models/task.dart';
 
+DateTime googleCalendarDateForTask(TaskItem task) {
+  const dayOffsets = {
+    'Lunes': 0,
+    'Martes': 1,
+    'Miércoles': 2,
+    'Jueves': 3,
+    'Viernes': 4,
+    'Sábado': 5,
+    'Domingo': 6,
+  };
+  final offset = dayOffsets[task.day];
+  if (offset == null) throw StateError('No se reconoce el día de la tarea.');
+  return DateTime.utc(
+    task.weekStart.year,
+    task.weekStart.month,
+    task.weekStart.day + offset,
+  );
+}
+
 class GoogleCalendarService {
   GoogleCalendarService({http.Client? client}) : _client = client ?? http.Client();
 
@@ -148,21 +167,7 @@ class GoogleCalendarService {
       };
 
   Map<String, dynamic> _eventData(TaskItem task) {
-    const dayOffsets = {
-      'Lunes': 0,
-      'Martes': 1,
-      'Miércoles': 2,
-      'Jueves': 3,
-      'Viernes': 4,
-    };
-    final offset = dayOffsets[task.day];
-    if (offset == null) throw StateError('No se reconoce el día de la tarea.');
-
-    final start = DateTime.utc(
-      task.weekStart.year,
-      task.weekStart.month,
-      task.weekStart.day + offset,
-    );
+    final start = googleCalendarDateForTask(task);
     final end = start.add(const Duration(days: 1));
     final startDate = _dateString(start);
     final endDate = _dateString(end);

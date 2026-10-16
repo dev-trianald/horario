@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
 const weekdays = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+const calendarWeekdays = [
+  ...weekdays,
+  'Sábado',
+  'Domingo',
+];
 const subjects = ['IP2', 'PSP', 'SGE', 'PMDM', 'PI', 'DI', 'ING', 'AD', 'LD'];
 const classTimes = [
   '8:15 - 9:15',

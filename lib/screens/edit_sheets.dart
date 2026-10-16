@@ -564,12 +564,14 @@ class TaskEditorSheet extends StatefulWidget {
     required this.subject,
     this.availableSubjects = const [],
     this.task,
+    this.weekStart,
   });
 
   final String day;
   final String subject;
   final List<ClassSubject> availableSubjects;
   final TaskItem? task;
+  final DateTime? weekStart;
 
   @override
   State<TaskEditorSheet> createState() => _TaskEditorSheetState();
@@ -597,7 +599,8 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
         TextEditingController(text: widget.task?.message ?? '');
     _day = widget.task?.day ?? widget.day;
     _subject = widget.task?.subject ?? widget.subject;
-    _weekStart = mondayOf(widget.task?.weekStart ?? DateTime.now());
+    _weekStart =
+        mondayOf(widget.task?.weekStart ?? widget.weekStart ?? DateTime.now());
     _isExam = widget.task?.isExam ?? false;
   }
 
@@ -663,8 +666,9 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _day,
+                          isExpanded: true,
                           decoration: const InputDecoration(labelText: 'Día'),
-                          items: weekdays
+                          items: calendarWeekdays
                               .map((day) => DropdownMenuItem(
                                   value: day, child: Text(day)))
                               .toList(),
@@ -675,6 +679,7 @@ class _TaskEditorSheetState extends State<TaskEditorSheet> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           initialValue: _subject,
+                          isExpanded: true,
                           decoration:
                               const InputDecoration(labelText: 'Asignatura'),
                           items: _subjectOptions

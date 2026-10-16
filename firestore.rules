@@ -39,7 +39,10 @@ service cloud.firestore {
           'day', 'subject', 'message', 'color', 'week_start',
           'is_exam', 'completed', 'created_at', 'schedule_id'
         ])
-        && data.day in ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
+        && data.day in [
+          'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes',
+          'Sábado', 'Domingo'
+        ]
         && data.subject is string
         && data.message is string
         && data.message.size() > 0
