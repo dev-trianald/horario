@@ -23,15 +23,15 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Configure stable Android signing
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/taskdam-release.keystore"
-          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/taskdam-release.keystore" >> "$GITHUB_ENV"
-      - name: Warn when Google Sign-In signing is not configured
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' }}
-        run: echo "::warning::This APK uses a temporary debug signing key. Configure the Android keystore Actions secrets to enable Google Sign-In."
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/taskdam-release.keystore"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/taskdam-release.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::This APK uses a temporary debug signing key. Configure the Android keystore Actions secrets to enable Google Sign-In."
+          fi
       - name: Build APK
         run: flutter build apk --release
         env:
